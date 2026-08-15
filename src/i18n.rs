@@ -7,44 +7,37 @@ pub enum UiLanguage {
 
 impl UiLanguage {
     pub const fn label(self) -> &'static str {
-        match self {
-            Self::Japanese => "日本語",
-            Self::English => "English",
-        }
+        match self { Self::Japanese => "日本語", Self::English => "English" }
     }
 
     pub fn text(self, key: &str) -> &'static str {
         match (self, key) {
-            (Self::Japanese, "subtitle") => "複数形式に対応したデコンパイラ・フロントエンド",
-            (Self::English, "subtitle") => "Multi-format decompiler frontend",
+            (Self::Japanese, "subtitle") => "外部バックエンド不要の自己完結型マルチ形式デコンパイラ",
+            (Self::English, "subtitle") => "Self-contained multi-format decompiler with no external backends",
             (Self::Japanese, "input") => "入力ファイル",
             (Self::English, "input") => "Input file",
             (Self::Japanese, "output") => "出力先",
             (Self::English, "output") => "Output",
             (Self::Japanese, "browse") => "参照…",
             (Self::English, "browse") => "Browse…",
-            (Self::Japanese, "backend") => "バックエンド",
-            (Self::English, "backend") => "Backend",
-            (Self::Japanese, "timeout") => "タイムアウト（秒）",
-            (Self::English, "timeout") => "Timeout (seconds)",
+            (Self::Japanese, "engine") => "内蔵エンジン",
+            (Self::English, "engine") => "Built-in engine",
             (Self::Japanese, "detect") => "形式を解析",
             (Self::English, "detect") => "Detect",
             (Self::Japanese, "decompile") => "デコンパイル",
             (Self::English, "decompile") => "Decompile",
-            (Self::Japanese, "working") => "解析中…",
-            (Self::English, "working") => "Working…",
+            (Self::Japanese, "working") => "内蔵エンジンで解析中…",
+            (Self::English, "working") => "Analyzing with the built-in engine…",
             (Self::Japanese, "kind") => "形式",
             (Self::English, "kind") => "Kind",
             (Self::Japanese, "language") => "推定言語",
             (Self::English, "language") => "Likely language",
             (Self::Japanese, "confidence") => "信頼度",
             (Self::English, "confidence") => "Confidence",
-            (Self::Japanese, "engines") => "バックエンド状態",
-            (Self::English, "engines") => "Backend status",
-            (Self::Japanese, "available") => "利用可能",
-            (Self::English, "available") => "Available",
-            (Self::Japanese, "missing") => "未検出",
-            (Self::English, "missing") => "Missing",
+            (Self::Japanese, "capabilities") => "内蔵対応形式",
+            (Self::English, "capabilities") => "Built-in capabilities",
+            (Self::Japanese, "fidelity") => "復元度",
+            (Self::English, "fidelity") => "Fidelity",
             (Self::Japanese, "preview") => "出力プレビュー",
             (Self::English, "preview") => "Output preview",
             (Self::Japanese, "log") => "ログ",
@@ -59,6 +52,8 @@ impl UiLanguage {
             (Self::English, "select_input") => "Select an input file",
             (Self::Japanese, "done") => "完了",
             (Self::English, "done") => "Done",
+            (Self::Japanese, "no_external") => "Ghidra / CFR / JADX / pycdc / ILSpy 等は不要です",
+            (Self::English, "no_external") => "No Ghidra, CFR, JADX, pycdc, ILSpy, or other decompiler executables required",
             _ => "",
         }
     }
