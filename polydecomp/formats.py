@@ -30,6 +30,20 @@ def _u32(data: bytes, offset: int, endian: str = "<") -> int | None:
     return struct.unpack_from(f"{endian}I", data, offset)[0]
 
 
+def _looks_like_java_class(data: bytes, suffix: str) -> bool:
+    if not data.startswith(b"\xca\xfe\xba\xbe"):
+        return False
+    if suffix == ".class":
+        return True
+    # CAFEBABE is also the big-endian fat Mach-O magic. Java class files place
+    # minor/major u16 versions immediately after the magic; supported/known
+    # class-file majors are well above the tiny architecture-count field used
+    # by fat Mach-O. Keep a conservative upper bound so malformed data fails
+    # into generic/fat inspection rather than being over-classified as Java.
+    major = _u16(data, 6, ">")
+    return major is not None and 45 <= major <= 100
+
+
 def detect_format(data: bytes, suffix: str = "") -> FormatInfo:
     suffix = suffix.lower()
     if data.startswith(b"MZ"):
@@ -52,7 +66,7 @@ def detect_format(data: bytes, suffix: str = "") -> FormatInfo:
         machines = {3: "x86", 40: "arm", 62: "x86_64", 183: "arm64", 243: "riscv"}
         return FormatInfo("ELF", machines.get(machine), {"class": elf_class, "machine": machine})
 
-    if data.startswith(b"\xca\xfe\xba\xbe") and suffix == ".class":
+    if _looks_like_java_class(data, suffix):
         return FormatInfo("Java class")
 
     magic4 = data[:4]
@@ -66,10 +80,15 @@ def detect_format(data: bytes, suffix: str = "") -> FormatInfo:
     if magic4 in macho:
         width, endian = macho[magic4]
         cpu = _u32(data, 4, endian) if width != "fat" else None
-        return FormatInfo("Mach-O", None, {"class": width, "cpu_type": cpu})
+        metadata: dict[str, object] = {"class": width}
+        if width == "fat":
+            architecture_count = _u32(data, 4, ">")
+            if architecture_count is not None:
+                metadata["architecture_count"] = architecture_count
+        elif cpu is not None:
+            metadata["cpu_type"] = cpu
+        return FormatInfo("Mach-O", None, metadata)
 
-    if data.startswith(b"\xca\xfe\xba\xbe"):
-        return FormatInfo("Java class")
     if data.startswith(b"\x00asm"):
         version = _u32(data, 4) if len(data) >= 8 else None
         return FormatInfo("WebAssembly", "wasm32", {"version": version})
