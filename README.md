@@ -1,42 +1,119 @@
 # PolyDecomp
 
-PolyDecomp is a cross-platform, bilingual (English/Japanese) static decompilation and inspection workbench.
+PolyDecomp is a **Rust-native, cross-platform decompiler frontend** with both a CLI and a Japanese/English GUI. It detects the input format and routes it to the best installed decompiler backend.
 
-It is intentionally designed as a safe, offline-first analysis tool: input files are read locally, no code from the inspected target is executed, and parsers use bounded reads.
+> PolyDecomp is a frontend/orchestrator. It does not claim to reconstruct the exact original source when compilation has removed names, comments, types, generics, macros, or control-flow structure.
 
-## Current capabilities
+## Features
 
-- Detect common PE/ELF/Mach-O, Java class, Python bytecode, Lua bytecode, WebAssembly and text/JavaScript inputs.
-- Extract printable ASCII/UTF-16LE strings with size and count limits.
-- Inspect Python `.pyc` bytecode without executing the target program.
-- Parse Java `.class` constant pools and surface UTF-8 constants, class names and descriptors.
-- Show PE/ELF/Mach-O/WebAssembly metadata and basic headers.
-- Export an analysis report as JSON.
-- Desktop GUI with English and Japanese UI.
-- CLI for repeatable automation.
+- Native Rust application: one executable contains the GUI and CLI.
+- Japanese / English GUI with runtime Japanese system-font discovery.
+- Drag & drop, automatic file detection, backend selection, background execution, backend health view, and output preview.
+- Safe process invocation without shell interpolation.
+- Backend timeout and output-overwrite protection in the CLI.
+- Windows, Linux and macOS GitHub Actions builds.
 
-PolyDecomp does **not** claim source-perfect reconstruction. Native-code decompilation is represented as structured inspection until a dedicated IR/decompiler backend is added.
+## Supported inputs
 
-## Quick start
+| Input | Preferred backend | Fallback |
+|---|---|---|
+| JVM `.class` / `.jar` | CFR / FernFlower | `javap` for one `.class` |
+| Android `.apk` / `.dex` | JADX | — |
+| Python `.pyc` | pycdc | pycdas |
+| Lua `.luac` | LuaDec | — |
+| WebAssembly `.wasm` | WABT `wasm-decompile` | `wasm2wat` |
+| .NET managed `.exe` / `.dll` | ILSpy `ilspycmd` | — |
+| Native PE / ELF / Mach-O | Ghidra headless | RetDec, then `objdump` |
+| Go / Rust / Swift native programs | Ghidra headless | RetDec, then `objdump` |
+| Existing source | copied as-is | — |
+
+Go, Rust, Swift, C and C++ native binaries are decompiled to **C-like pseudocode** by native decompilers; the original source language is only heuristically identified when useful markers remain.
+
+## GUI
+
+Run without arguments:
 
 ```bash
-python -m polydecomp.cli sample.bin
-python -m polydecomp.gui
+polydecomp
 ```
 
-Python 3.11+ is supported.
-
-## Safety model
-
-PolyDecomp never imports or launches an inspected Python module, Java class, native executable, script or bytecode file. Parsing is performed from bytes with conservative bounds. Malformed inputs should produce a structured error instead of executing target-controlled code.
-
-## Development
+or explicitly:
 
 ```bash
-python -m unittest discover -s tests -v
-python -m compileall -q polydecomp tests
+polydecomp gui
 ```
 
-## License
+The GUI supports Japanese and English from the language selector in the upper-right corner.
 
-MIT
+## CLI
+
+Detect a file:
+
+```bash
+polydecomp detect program.exe
+```
+
+Show available engines:
+
+```bash
+polydecomp doctor
+```
+
+Automatically decompile:
+
+```bash
+polydecomp decompile Example.class -o Example.java
+polydecomp decompile app.apk -o app-decompiled
+polydecomp decompile module.pyc -o module.py
+polydecomp decompile module.wasm -o module.c
+polydecomp decompile app.exe -o app.c
+```
+
+Select a backend:
+
+```bash
+polydecomp decompile app.exe -o app.c --backend ghidra
+polydecomp decompile Example.class -o Example.java --backend cfr
+```
+
+## Backend discovery
+
+PolyDecomp looks in `PATH` for executable backends and additionally supports:
+
+- `GHIDRA_HOME=/path/to/ghidra`
+- `CFR_JAR=/path/to/cfr.jar`
+- `FERNFLOWER_JAR=/path/to/fernflower.jar`
+
+CFR can also be placed at `~/.local/share/polydecomp/cfr.jar` or `~/.polydecomp/cfr.jar`.
+
+## Build from source
+
+PolyDecomp uses Rust 1.92+ because egui/eframe 0.35 requires it.
+
+```bash
+cargo build --release
+cargo test --all-targets
+```
+
+On Ubuntu/Debian, install the native GUI build dependencies first:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libclang-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev \
+  libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libx11-dev pkg-config libssl-dev
+```
+
+## CI
+
+`.github/workflows/ci.yml` runs formatting, Clippy, tests and release builds. It also produces downloadable native build artifacts for:
+
+- Windows x64
+- Linux x64
+- macOS ARM64
+
+Dependabot checks Cargo and GitHub Actions dependencies weekly.
+
+## Legal / intended use
+
+Use PolyDecomp only on software you own or have permission to inspect. A decompiler is useful for interoperability, debugging, recovery, auditing and authorized reverse engineering, but local law and software licenses can impose additional restrictions.
