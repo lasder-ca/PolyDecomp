@@ -1,11 +1,11 @@
 use crate::model::Tool;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 fn executable_candidates(name: &str) -> Vec<String> {
     #[cfg(target_os = "windows")]
     {
-        if Path::new(name).extension().is_some() {
+        if std::path::Path::new(name).extension().is_some() {
             vec![name.to_owned()]
         } else {
             vec![
@@ -65,9 +65,12 @@ fn ghidra_headless() -> Option<PathBuf> {
         return Some(path);
     }
     let home = env::var_os("GHIDRA_HOME").map(PathBuf::from)?;
-    [home.join("support/analyzeHeadless"), home.join("support/analyzeHeadless.bat")]
-        .into_iter()
-        .find(|path| path.is_file())
+    [
+        home.join("support/analyzeHeadless"),
+        home.join("support/analyzeHeadless.bat"),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())
 }
 
 fn tool(name: &str, path: Option<PathBuf>, true_decompiler: bool, notes: &str) -> Tool {
@@ -81,20 +84,75 @@ fn tool(name: &str, path: Option<PathBuf>, true_decompiler: bool, notes: &str) -
 
 pub fn inventory() -> Vec<Tool> {
     vec![
-        tool("java", which("java"), false, "Runtime used by CFR/FernFlower"),
+        tool(
+            "java",
+            which("java"),
+            false,
+            "Runtime used by CFR/FernFlower",
+        ),
         tool("cfr", cfr_jar(), true, "JVM class/JAR -> Java source"),
-        tool("fernflower", env_file("FERNFLOWER_JAR"), true, "Alternative JVM decompiler"),
-        tool("javap", which("javap"), false, "JVM bytecode disassembly fallback"),
-        tool("jadx", which("jadx"), true, "Android APK/DEX -> Java source"),
-        tool("pycdc", which("pycdc"), true, "CPython .pyc -> Python source"),
-        tool("pycdas", which("pycdas"), false, "Python bytecode disassembly fallback"),
-        tool("luadec", which("luadec"), true, "Lua bytecode -> Lua source"),
-        tool("wasm-decompile", which("wasm-decompile"), true, "WASM -> C-like source"),
+        tool(
+            "fernflower",
+            env_file("FERNFLOWER_JAR"),
+            true,
+            "Alternative JVM decompiler",
+        ),
+        tool(
+            "javap",
+            which("javap"),
+            false,
+            "JVM bytecode disassembly fallback",
+        ),
+        tool(
+            "jadx",
+            which("jadx"),
+            true,
+            "Android APK/DEX -> Java source",
+        ),
+        tool(
+            "pycdc",
+            which("pycdc"),
+            true,
+            "CPython .pyc -> Python source",
+        ),
+        tool(
+            "pycdas",
+            which("pycdas"),
+            false,
+            "Python bytecode disassembly fallback",
+        ),
+        tool(
+            "luadec",
+            which("luadec"),
+            true,
+            "Lua bytecode -> Lua source",
+        ),
+        tool(
+            "wasm-decompile",
+            which("wasm-decompile"),
+            true,
+            "WASM -> C-like source",
+        ),
         tool("wasm2wat", which("wasm2wat"), false, "WASM text fallback"),
         tool("ilspycmd", which("ilspycmd"), true, ".NET/C# decompiler"),
-        tool("ghidra", ghidra_headless(), true, "Native PE/ELF/Mach-O -> C-like pseudocode"),
-        tool("retdec", which("retdec-decompiler"), true, "Native fallback decompiler"),
-        tool("objdump", which("objdump"), false, "Native assembly fallback"),
+        tool(
+            "ghidra",
+            ghidra_headless(),
+            true,
+            "Native PE/ELF/Mach-O -> C-like pseudocode",
+        ),
+        tool(
+            "retdec",
+            which("retdec-decompiler"),
+            true,
+            "Native fallback decompiler",
+        ),
+        tool(
+            "objdump",
+            which("objdump"),
+            false,
+            "Native assembly fallback",
+        ),
     ]
 }
 
