@@ -6,10 +6,11 @@ It is intentionally designed as a safe, offline-first analysis tool: input files
 
 ## Current capabilities
 
-- Detect common PE/ELF/Mach-O, Java class, Python bytecode, Lua bytecode, WebAssembly and text/JavaScript inputs.
+- Detect common PE/ELF/Mach-O, Java class, Python bytecode, Lua bytecode, WebAssembly and source/text inputs.
 - Extract printable ASCII/UTF-16LE strings with size and count limits.
-- Inspect Python `.pyc` bytecode without executing the target program.
-- Parse Java `.class` constant pools and surface UTF-8 constants, class names and descriptors.
+- Inspect Python `.pyc` headers/magic without importing or executing the target program.
+- Parse Java `.class` constant pools and surface UTF-8 constants plus class-file version metadata.
+- Extract function/class/type outlines from Python, JavaScript/TypeScript, Go, Rust, Java and Lua source without executing it.
 - Show PE/ELF/Mach-O/WebAssembly metadata and basic headers.
 - Export an analysis report as JSON.
 - Desktop GUI with English and Japanese UI.
@@ -33,6 +34,7 @@ PolyDecomp never imports or launches an inspected Python module, Java class, nat
 ## Development
 
 ```bash
+python -m pip install -e .
 python -m unittest discover -s tests -v
 python -m compileall -q polydecomp tests
 ```
