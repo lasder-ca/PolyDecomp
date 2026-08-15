@@ -52,6 +52,9 @@ def detect_format(data: bytes, suffix: str = "") -> FormatInfo:
         machines = {3: "x86", 40: "arm", 62: "x86_64", 183: "arm64", 243: "riscv"}
         return FormatInfo("ELF", machines.get(machine), {"class": elf_class, "machine": machine})
 
+    if data.startswith(b"\xca\xfe\xba\xbe") and suffix == ".class":
+        return FormatInfo("Java class")
+
     magic4 = data[:4]
     macho = {
         b"\xfe\xed\xfa\xce": ("32-bit", ">"),
