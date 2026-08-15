@@ -1,33 +1,26 @@
 # PolyDecomp
 
-PolyDecomp is a **Rust-native, cross-platform decompiler frontend** with both a CLI and a Japanese/English GUI. It detects the input format and routes it to the best installed decompiler backend.
+PolyDecomp is a **self-contained Rust decompiler/disassembler** with a native GUI and CLI. Version 0.3 removes the external decompiler-backend model: the release binary does not require Ghidra, CFR, JADX, pycdc, LuaDec, WABT, ILSpy, RetDec, or `objdump`.
 
-> PolyDecomp is a frontend/orchestrator. It does not claim to reconstruct the exact original source when compilation has removed names, comments, types, generics, macros, or control-flow structure.
+日本語 / English UI is included in the same executable.
 
-## Features
+## Built-in formats
 
-- Native Rust application: one executable contains the GUI and CLI.
-- Japanese / English GUI with runtime Japanese system-font discovery.
-- Drag & drop, automatic file detection, backend selection, background execution, backend health view, and output preview.
-- Safe process invocation without shell interpolation.
-- Backend timeout and output-overwrite protection in the CLI.
-- Windows, Linux and macOS GitHub Actions builds.
-
-## Supported inputs
-
-| Input | Preferred backend | Fallback |
+| Input | Built-in implementation | Output |
 |---|---|---|
-| JVM `.class` / `.jar` | CFR / FernFlower | `javap` for one `.class` |
-| Android `.apk` / `.dex` | JADX | — |
-| Python `.pyc` | pycdc | pycdas |
-| Lua `.luac` | LuaDec | — |
-| WebAssembly `.wasm` | WABT `wasm-decompile` | `wasm2wat` |
-| .NET managed `.exe` / `.dll` | ILSpy `ilspycmd` | — |
-| Native PE / ELF / Mach-O | Ghidra headless | RetDec, then `objdump` |
-| Go / Rust / Swift native programs | Ghidra headless | RetDec, then `objdump` |
-| Existing source | copied as-is | — |
+| JVM `.class` | class-file parser, constant pool, descriptors, JVM instruction decoder | Java-like source + bytecode comments |
+| JVM `.jar` | internal ZIP reader + JVM engine | source tree |
+| Android `.dex` | DEX strings/types/protos/classes/methods/code-item parser | Java-like source tree |
+| Android `.apk` | internal ZIP reader + all `classes*.dex` files | source tree |
+| CPython `.pyc` | pyc header, marshal/code-object reader, wordcode reconstruction | Python-like source/report |
+| Lua `.luac` | Lua 5.1 prototype/instruction decoder; structural recovery for 5.2–5.4 | Lua-like source/report |
+| WebAssembly `.wasm` | internally linked Rust WebAssembly printer | WAT |
+| .NET `.exe/.dll` | PE/CLR metadata and IL structural analysis | C#-like source/report |
+| PE / ELF / Mach-O | internal object parser, x86/x64 decoder, AArch64 basic semantic decoder | C-like pseudocode/disassembly |
+| Go / Rust binaries | native engine + language markers | C-like pseudocode/disassembly |
+| unknown binary | internal strings + hex structural analysis | analysis report |
 
-Go, Rust, Swift, C and C++ native binaries are decompiled to **C-like pseudocode** by native decompilers; the original source language is only heuristically identified when useful markers remain.
+“Decompiler” does not mean that compiler-lost information can be recreated. Optimized native binaries can lose variable names, comments, source types, control-flow structure, generics and other source-level information. PolyDecomp reconstructs what is recoverable and annotates lower-confidence output instead of inventing missing source.
 
 ## GUI
 
@@ -37,83 +30,58 @@ Run without arguments:
 polydecomp
 ```
 
-or explicitly:
+Features:
 
-```bash
-polydecomp gui
-```
-
-The GUI supports Japanese and English from the language selector in the upper-right corner.
+- drag and drop
+- automatic format/language detection
+- Japanese / English switch
+- output preview
+- background decompilation so the UI stays responsive
+- no decompiler executable installation screen because the engines are built in
 
 ## CLI
 
-Detect a file:
-
 ```bash
 polydecomp detect program.exe
-```
-
-Show available engines:
-
-```bash
 polydecomp doctor
-```
-
-Automatically decompile:
-
-```bash
-polydecomp decompile Example.class -o Example.java
+polydecomp decompile Example.class
 polydecomp decompile app.apk -o app-decompiled
-polydecomp decompile module.pyc -o module.py
-polydecomp decompile module.wasm -o module.c
-polydecomp decompile app.exe -o app.c
+polydecomp decompile program.exe -o program.decompiled.c --force
 ```
 
-Select a backend:
+`doctor` reports the built-in capabilities rather than searching the machine for external programs.
 
-```bash
-polydecomp decompile app.exe -o app.c --backend ghidra
-polydecomp decompile Example.class -o Example.java --backend cfr
-```
-
-## Backend discovery
-
-PolyDecomp looks in `PATH` for executable backends and additionally supports:
-
-- `GHIDRA_HOME=/path/to/ghidra`
-- `CFR_JAR=/path/to/cfr.jar`
-- `FERNFLOWER_JAR=/path/to/fernflower.jar`
-
-CFR can also be placed at `~/.local/share/polydecomp/cfr.jar` or `~/.polydecomp/cfr.jar`.
-
-## Build from source
-
-PolyDecomp uses Rust 1.92+ because egui/eframe 0.35 requires it.
+## Build
 
 ```bash
 cargo build --release
-cargo test --all-targets
 ```
 
-On Ubuntu/Debian, install the native GUI build dependencies first:
+Quality checks used by CI:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y \
-  libclang-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev \
-  libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libx11-dev pkg-config libssl-dev
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
+cargo build --release
 ```
 
-## CI
+## Safety limits
 
-`.github/workflows/ci.yml` runs formatting, Clippy, tests and release builds. It also produces downloadable native build artifacts for:
+Untrusted binaries are **parsed, not executed**. Archive traversal is rejected and archive/member/input size limits are enforced to reduce accidental resource exhaustion. PolyDecomp does not launch the file being analyzed.
 
-- Windows x64
-- Linux x64
+The GUI may invoke the operating system file manager only when the user clicks **Open output**; this is unrelated to decompilation.
+
+## Release builds
+
+GitHub Actions builds release binaries for:
+
+- Windows x86_64
+- Linux x86_64
 - macOS ARM64
 
-Dependabot checks Cargo and GitHub Actions dependencies weekly.
+A successful `main` CI run for a new package version triggers the release workflow, which creates a GitHub Release and uploads the three platform binaries.
 
-## Legal / intended use
+## License
 
-Use PolyDecomp only on software you own or have permission to inspect. A decompiler is useful for interoperability, debugging, recovery, auditing and authorized reverse engineering, but local law and software licenses can impose additional restrictions.
+MIT
