@@ -7,8 +7,8 @@ use eframe::egui;
 use rfd::FileDialog;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
@@ -162,7 +162,7 @@ impl eframe::App for PolyDecompApp {
             self.set_input(path);
         }
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.heading("PolyDecomp");
@@ -221,7 +221,8 @@ impl eframe::App for PolyDecompApp {
                     if ui.button(self.t("auto_output")).clicked() {
                         if let Some(detection) = &self.detection {
                             let input = PathBuf::from(self.input.trim());
-                            self.output = default_output(&input, detection.kind).display().to_string();
+                            self.output =
+                                default_output(&input, detection.kind).display().to_string();
                         }
                     }
                     ui.end_row();
@@ -243,7 +244,10 @@ impl eframe::App for PolyDecompApp {
                 ui.add(egui::DragValue::new(&mut self.timeout_secs).range(1..=86_400));
 
                 ui.separator();
-                if ui.add_enabled(!self.busy, egui::Button::new(self.t("detect"))).clicked() {
+                if ui
+                    .add_enabled(!self.busy, egui::Button::new(self.t("detect")))
+                    .clicked()
+                {
                     self.detect_now();
                 }
                 if ui
@@ -286,10 +290,12 @@ impl eframe::App for PolyDecompApp {
                             self.t("missing")
                         };
                         ui.label(status);
-                        ui.label(tool.path.as_ref().map_or_else(
-                            || tool.notes.clone(),
-                            |path| path.display().to_string(),
-                        ));
+                        ui.label(
+                            tool.path.as_ref().map_or_else(
+                                || tool.notes.clone(),
+                                |path| path.display().to_string(),
+                            ),
+                        );
                         ui.end_row();
                     }
                 });
@@ -298,9 +304,7 @@ impl eframe::App for PolyDecompApp {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.strong(self.t("log"));
-                if !self.output.trim().is_empty()
-                    && ui.button(self.t("open_output")).clicked()
-                {
+                if !self.output.trim().is_empty() && ui.button(self.t("open_output")).clicked() {
                     if let Err(error) = open_output(Path::new(self.output.trim())) {
                         self.log = error;
                     }
