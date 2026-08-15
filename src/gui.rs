@@ -7,14 +7,12 @@ use eframe::egui;
 use rfd::FileDialog;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-struct WorkerResult {
-    result: Result<DecompileResult, String>,
-}
+struct WorkerResult(Result<DecompileResult, String>);
 
 pub struct PolyDecompApp {
     language: UiLanguage,
@@ -53,9 +51,13 @@ impl PolyDecompApp {
 
     fn set_input(&mut self, path: PathBuf) {
         self.input = path.display().to_string();
-        match detect(&path) {
+        self.apply_detection(&path);
+    }
+
+    fn apply_detection(&mut self, path: &Path) {
+        match detect(path) {
             Ok(detection) => {
-                self.output = default_output(&path, detection.kind).display().to_string();
+                self.output = default_output(path, detection.kind).display().to_string();
                 self.log = format!("{}: {}", self.t("kind"), detection.kind.as_str());
                 self.detection = Some(detection);
             }
@@ -72,27 +74,43 @@ impl PolyDecompApp {
             return;
         }
         let path = PathBuf::from(self.input.trim());
-        match detect(&path) {
-            Ok(detection) => {
-                if self.output.trim().is_empty() {
-                    self.output = default_output(&path, detection.kind).display().to_string();
-                }
-                self.log = format!("{}: {}", self.t("kind"), detection.kind.as_str());
-                self.detection = Some(detection);
-            }
-            Err(error) => {
-                self.log = error;
-                self.detection = None;
-            }
+        self.apply_detection(&path);
+    }
+
+    fn choose_input(&mut self) {
+        if let Some(path) = FileDialog::new().pick_file() {
+            self.set_input(path);
         }
     }
 
-    fn start_decompile(&mut self) {
-        if self.busy {
-            return;
+    fn choose_output(&mut self) {
+        let directory = self
+            .detection
+            .as_ref()
+            .is_some_and(|detection| detection.kind.output_is_directory());
+        let selected = if directory {
+            FileDialog::new().pick_folder()
+        } else {
+            FileDialog::new().save_file()
+        };
+        if let Some(path) = selected {
+            self.output = path.display().to_string();
         }
-        if self.input.trim().is_empty() {
-            self.log = self.t("select_input").to_owned();
+    }
+
+    fn reset_output(&mut self) {
+        let Some(detection) = &self.detection else {
+            return;
+        };
+        let input = PathBuf::from(self.input.trim());
+        self.output = default_output(&input, detection.kind).display().to_string();
+    }
+
+    fn start_decompile(&mut self) {
+        if self.busy || self.input.trim().is_empty() {
+            if self.input.trim().is_empty() {
+                self.log = self.t("select_input").to_owned();
+            }
             return;
         }
         self.detect_now();
@@ -114,23 +132,20 @@ impl PolyDecompApp {
         self.busy = true;
         self.preview.clear();
         self.log = self.t("working").to_owned();
-
         thread::spawn(move || {
             let result = decompile(&input, &output, &options).map_err(|error| error.to_string());
-            let _ = sender.send(WorkerResult { result });
+            let _ = sender.send(WorkerResult(result));
         });
     }
 
     fn poll_worker(&mut self) {
-        let Some(receiver) = &self.worker else {
-            return;
-        };
-        let Ok(message) = receiver.try_recv() else {
+        let message = self.worker.as_ref().and_then(|receiver| receiver.try_recv().ok());
+        let Some(WorkerResult(result)) = message else {
             return;
         };
         self.busy = false;
         self.worker = None;
-        match message.result {
+        match result {
             Ok(result) => {
                 self.log = format!(
                     "{}: {} → {} [{}]",
@@ -141,9 +156,16 @@ impl PolyDecompApp {
                 );
                 self.preview = preview_output(&result.output);
             }
-            Err(error) => {
-                self.log = error;
-            }
+            Err(error) => self.log = error,
+        }
+    }
+
+    fn try_open_output(&mut self) {
+        if self.output.trim().is_empty() {
+            return;
+        }
+        if let Err(error) = open_output(Path::new(self.output.trim())) {
+            self.log = error;
         }
     }
 }
@@ -157,8 +179,12 @@ impl eframe::App for PolyDecompApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let dropped = ui.ctx().input(|input| input.raw.dropped_files.clone());
-        if let Some(path) = dropped.into_iter().find_map(|file| file.path) {
+        if let Some(path) = ui
+            .ctx()
+            .input(|input| input.raw.dropped_files.clone())
+            .into_iter()
+            .find_map(|file| file.path)
+        {
             self.set_input(path);
         }
 
@@ -177,56 +203,28 @@ impl eframe::App for PolyDecompApp {
                         });
                 });
             });
-
             ui.separator();
             ui.weak(self.t("drop"));
-            ui.add_space(6.0);
 
-            egui::Grid::new("paths")
-                .num_columns(4)
-                .spacing([10.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label(self.t("input"));
-                    ui.add_sized(
-                        [ui.available_width() - 110.0, 24.0],
-                        egui::TextEdit::singleline(&mut self.input),
-                    );
-                    if ui.button(self.t("browse")).clicked() {
-                        if let Some(path) = FileDialog::new().pick_file() {
-                            self.set_input(path);
-                        }
-                    }
-                    ui.label("");
-                    ui.end_row();
+            egui::Grid::new("paths").num_columns(4).spacing([10.0, 8.0]).show(ui, |ui| {
+                ui.label(self.t("input"));
+                ui.add_sized([ui.available_width() - 110.0, 24.0], egui::TextEdit::singleline(&mut self.input));
+                if ui.button(self.t("browse")).clicked() {
+                    self.choose_input();
+                }
+                ui.label("");
+                ui.end_row();
 
-                    ui.label(self.t("output"));
-                    ui.add_sized(
-                        [ui.available_width() - 190.0, 24.0],
-                        egui::TextEdit::singleline(&mut self.output),
-                    );
-                    if ui.button(self.t("browse")).clicked() {
-                        let directory_output = self
-                            .detection
-                            .as_ref()
-                            .is_some_and(|detection| detection.kind.output_is_directory());
-                        let selected = if directory_output {
-                            FileDialog::new().pick_folder()
-                        } else {
-                            FileDialog::new().save_file()
-                        };
-                        if let Some(path) = selected {
-                            self.output = path.display().to_string();
-                        }
-                    }
-                    if ui.button(self.t("auto_output")).clicked() {
-                        if let Some(detection) = &self.detection {
-                            let input = PathBuf::from(self.input.trim());
-                            self.output =
-                                default_output(&input, detection.kind).display().to_string();
-                        }
-                    }
-                    ui.end_row();
-                });
+                ui.label(self.t("output"));
+                ui.add_sized([ui.available_width() - 190.0, 24.0], egui::TextEdit::singleline(&mut self.output));
+                if ui.button(self.t("browse")).clicked() {
+                    self.choose_output();
+                }
+                if ui.button(self.t("auto_output")).clicked() {
+                    self.reset_output();
+                }
+                ui.end_row();
+            });
 
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -238,22 +236,14 @@ impl eframe::App for PolyDecompApp {
                             ui.selectable_value(&mut self.backend, (*backend).to_owned(), *backend);
                         }
                     });
-
                 ui.separator();
                 ui.label(self.t("timeout"));
                 ui.add(egui::DragValue::new(&mut self.timeout_secs).range(1..=86_400));
-
                 ui.separator();
-                if ui
-                    .add_enabled(!self.busy, egui::Button::new(self.t("detect")))
-                    .clicked()
-                {
+                if ui.add_enabled(!self.busy, egui::Button::new(self.t("detect"))).clicked() {
                     self.detect_now();
                 }
-                if ui
-                    .add_enabled(!self.busy, egui::Button::new(self.t("decompile")))
-                    .clicked()
-                {
+                if ui.add_enabled(!self.busy, egui::Button::new(self.t("decompile"))).clicked() {
                     self.start_decompile();
                 }
                 if self.busy {
@@ -284,18 +274,8 @@ impl eframe::App for PolyDecompApp {
                 egui::Grid::new("tools").striped(true).show(ui, |ui| {
                     for tool in inventory() {
                         ui.monospace(&tool.name);
-                        let status = if tool.path.is_some() {
-                            self.t("available")
-                        } else {
-                            self.t("missing")
-                        };
-                        ui.label(status);
-                        ui.label(
-                            tool.path.as_ref().map_or_else(
-                                || tool.notes.clone(),
-                                |path| path.display().to_string(),
-                            ),
-                        );
+                        ui.label(if tool.path.is_some() { self.t("available") } else { self.t("missing") });
+                        ui.label(tool.path.as_ref().map_or_else(|| tool.notes.clone(), |path| path.display().to_string()));
                         ui.end_row();
                     }
                 });
@@ -304,35 +284,29 @@ impl eframe::App for PolyDecompApp {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.strong(self.t("log"));
-                if !self.output.trim().is_empty() && ui.button(self.t("open_output")).clicked() {
-                    if let Err(error) = open_output(Path::new(self.output.trim())) {
-                        self.log = error;
-                    }
+                if ui.button(self.t("open_output")).clicked() {
+                    self.try_open_output();
                 }
             });
             ui.label(&self.log);
-
             ui.add_space(8.0);
             ui.strong(self.t("preview"));
-            egui::ScrollArea::vertical()
-                .id_salt("preview-scroll")
-                .max_height(300.0)
-                .show(ui, |ui| {
-                    ui.add(
-                        egui::TextEdit::multiline(&mut self.preview)
-                            .font(egui::TextStyle::Monospace)
-                            .desired_width(f32::INFINITY)
-                            .desired_rows(15)
-                            .interactive(false),
-                    );
-                });
+            egui::ScrollArea::vertical().id_salt("preview-scroll").max_height(300.0).show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.preview)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(15)
+                        .interactive(false),
+                );
+            });
         });
     }
 }
 
 fn preview_output(path: &Path) -> String {
     if path.is_file() {
-        match fs::read(path) {
+        return match fs::read(path) {
             Ok(bytes) => {
                 let limit = bytes.len().min(512 * 1024);
                 let mut text = String::from_utf8_lossy(&bytes[..limit]).into_owned();
@@ -342,14 +316,14 @@ fn preview_output(path: &Path) -> String {
                 text
             }
             Err(error) => format!("preview error: {error}"),
-        }
-    } else if path.is_dir() {
+        };
+    }
+    if path.is_dir() {
         let mut entries = Vec::new();
         collect_entries(path, path, &mut entries, 200);
-        entries.join("\n")
-    } else {
-        String::new()
+        return entries.join("\n");
     }
+    String::new()
 }
 
 fn collect_entries(root: &Path, dir: &Path, entries: &mut Vec<String>, limit: usize) {
@@ -368,47 +342,27 @@ fn collect_entries(root: &Path, dir: &Path, entries: &mut Vec<String>, limit: us
         if path.is_dir() {
             collect_entries(root, &path, entries, limit);
         } else {
-            entries.push(
-                path.strip_prefix(root)
-                    .unwrap_or(&path)
-                    .display()
-                    .to_string(),
-            );
+            entries.push(path.strip_prefix(root).unwrap_or(&path).display().to_string());
         }
     }
 }
 
 fn open_output(path: &Path) -> Result<(), String> {
-    let target = if path.exists() {
-        if path.is_dir() {
-            path.to_path_buf()
-        } else {
-            path.parent().unwrap_or(path).to_path_buf()
-        }
+    let target = if path.exists() && path.is_dir() {
+        path.to_path_buf()
     } else {
         path.parent().unwrap_or(path).to_path_buf()
     };
 
     #[cfg(target_os = "windows")]
-    let mut command = {
-        let mut cmd = std::process::Command::new("explorer");
-        cmd.arg(&target);
-        cmd
-    };
+    let mut command = std::process::Command::new("explorer");
     #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut cmd = std::process::Command::new("open");
-        cmd.arg(&target);
-        cmd
-    };
+    let mut command = std::process::Command::new("open");
     #[cfg(all(unix, not(target_os = "macos")))]
-    let mut command = {
-        let mut cmd = std::process::Command::new("xdg-open");
-        cmd.arg(&target);
-        cmd
-    };
+    let mut command = std::process::Command::new("xdg-open");
 
     command
+        .arg(&target)
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("failed to open {}: {error}", target.display()))
@@ -416,32 +370,17 @@ fn open_output(path: &Path) -> Result<(), String> {
 
 fn install_japanese_font(ctx: &egui::Context) {
     #[cfg(target_os = "windows")]
-    let candidates = [
-        r"C:\Windows\Fonts\YuGothM.ttc",
-        r"C:\Windows\Fonts\meiryo.ttc",
-        r"C:\Windows\Fonts\msgothic.ttc",
-    ];
+    let candidates = [r"C:\Windows\Fonts\YuGothM.ttc", r"C:\Windows\Fonts\meiryo.ttc", r"C:\Windows\Fonts\msgothic.ttc"];
     #[cfg(target_os = "macos")]
-    let candidates = [
-        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-        "/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc",
-        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-    ];
+    let candidates = ["/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", "/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", "/System/Library/Fonts/AppleSDGothicNeo.ttc"];
     #[cfg(all(unix, not(target_os = "macos")))]
-    let candidates = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    ];
+    let candidates = ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf", "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"];
 
     let Some(data) = candidates.iter().find_map(|path| fs::read(path).ok()) else {
         return;
     };
     let mut fonts = egui::FontDefinitions::default();
-    fonts.font_data.insert(
-        "system-japanese".to_owned(),
-        Arc::new(egui::FontData::from_owned(data)),
-    );
+    fonts.font_data.insert("system-japanese".to_owned(), Arc::new(egui::FontData::from_owned(data)));
     if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
         family.insert(0, "system-japanese".to_owned());
     }
