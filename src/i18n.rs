@@ -7,13 +7,20 @@ pub enum UiLanguage {
 
 impl UiLanguage {
     pub const fn label(self) -> &'static str {
-        match self { Self::Japanese => "日本語", Self::English => "English" }
+        match self {
+            Self::Japanese => "日本語",
+            Self::English => "English",
+        }
     }
 
     pub fn text(self, key: &str) -> &'static str {
         match (self, key) {
-            (Self::Japanese, "subtitle") => "外部バックエンド不要の自己完結型マルチ形式デコンパイラ",
-            (Self::English, "subtitle") => "Self-contained multi-format decompiler with no external backends",
+            (Self::Japanese, "subtitle") => {
+                "外部バックエンド不要の自己完結型マルチ形式デコンパイラ"
+            }
+            (Self::English, "subtitle") => {
+                "Self-contained multi-format decompiler with no external backends"
+            }
             (Self::Japanese, "input") => "入力ファイル",
             (Self::English, "input") => "Input file",
             (Self::Japanese, "output") => "出力先",
@@ -53,7 +60,9 @@ impl UiLanguage {
             (Self::Japanese, "done") => "完了",
             (Self::English, "done") => "Done",
             (Self::Japanese, "no_external") => "Ghidra / CFR / JADX / pycdc / ILSpy 等は不要です",
-            (Self::English, "no_external") => "No Ghidra, CFR, JADX, pycdc, ILSpy, or other decompiler executables required",
+            (Self::English, "no_external") => {
+                "No Ghidra, CFR, JADX, pycdc, ILSpy, or other decompiler executables required"
+            }
             _ => "",
         }
     }

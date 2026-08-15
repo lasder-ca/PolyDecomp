@@ -1,4 +1,4 @@
-use polydecomp::{default_output, FileKind};
+use polydecomp::{FileKind, default_output};
 use std::path::Path;
 
 #[test]

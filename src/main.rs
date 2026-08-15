@@ -1,10 +1,14 @@
 use clap::{Parser, Subcommand};
-use polydecomp::{capabilities, decompile, default_output, detect, DecompileOptions};
+use polydecomp::{DecompileOptions, capabilities, decompile, default_output, detect};
 use serde_json::json;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
-#[command(name = "polydecomp", version, about = "Self-contained cross-platform multi-format decompiler")]
+#[command(
+    name = "polydecomp",
+    version,
+    about = "Self-contained cross-platform multi-format decompiler"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -34,17 +38,28 @@ fn run_cli() -> Result<(), String> {
         None | Some(Commands::Gui) => polydecomp::gui::run().map_err(|error| error.to_string()),
         Some(Commands::Detect { input }) => {
             let detection = detect(&input)?;
-            println!("{}", serde_json::to_string_pretty(&detection).map_err(|error| error.to_string())?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&detection).map_err(|error| error.to_string())?
+            );
             Ok(())
         }
         Some(Commands::Doctor) => {
-            println!("{}", serde_json::to_string_pretty(&capabilities()).map_err(|error| error.to_string())?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&capabilities()).map_err(|error| error.to_string())?
+            );
             Ok(())
         }
-        Some(Commands::Decompile { input, output, force }) => {
+        Some(Commands::Decompile {
+            input,
+            output,
+            force,
+        }) => {
             let detection = detect(&input)?;
             let output = output.unwrap_or_else(|| default_output(&input, detection.kind));
-            let result = decompile(&input, &output, &DecompileOptions { force }).map_err(|error| error.to_string())?;
+            let result = decompile(&input, &output, &DecompileOptions { force })
+                .map_err(|error| error.to_string())?;
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({

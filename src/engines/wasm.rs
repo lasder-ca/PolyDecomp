@@ -1,5 +1,7 @@
 pub fn decompile_wasm(data: &[u8]) -> Result<String, String> {
-    if !data.starts_with(b"\0asm") { return Err("not a WebAssembly module".to_owned()); }
+    if !data.starts_with(b"\0asm") {
+        return Err("not a WebAssembly module".to_owned());
+    }
     wasmprinter::print_bytes(data).map_err(|error| format!("WASM parse error: {error}"))
 }
 

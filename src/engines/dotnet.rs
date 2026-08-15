@@ -99,19 +99,29 @@ fn rva_to_offset(sections: &[Section], rva: u32) -> Option<usize> {
     sections.iter().find_map(|section| {
         let span = section.virtual_size.max(section.raw_size);
         (rva >= section.virtual_address && rva < section.virtual_address.saturating_add(span))
-            .then(|| usize::try_from(section.raw_offset.saturating_add(rva - section.virtual_address)).ok())
+            .then(|| {
+                usize::try_from(
+                    section
+                        .raw_offset
+                        .saturating_add(rva - section.virtual_address),
+                )
+                .ok()
+            })
             .flatten()
     })
 }
 
 fn parse_streams(data: &[u8], sections: &[Section], clr_rva: u32) -> Result<Streams, String> {
-    let clr = rva_to_offset(sections, clr_rva).ok_or_else(|| "CLR header RVA is not mapped".to_owned())?;
+    let clr = rva_to_offset(sections, clr_rva)
+        .ok_or_else(|| "CLR header RVA is not mapped".to_owned())?;
     let metadata_rva = u32_at(data, clr + 8)?;
-    let metadata = rva_to_offset(sections, metadata_rva).ok_or_else(|| "CLR metadata RVA is not mapped".to_owned())?;
+    let metadata = rva_to_offset(sections, metadata_rva)
+        .ok_or_else(|| "CLR metadata RVA is not mapped".to_owned())?;
     if u32_at(data, metadata)? != 0x424a_5342 {
         return Err("invalid CLR metadata signature".to_owned());
     }
-    let version_len = usize::try_from(u32_at(data, metadata + 12)?).map_err(|_| "CLR version length overflow".to_owned())?;
+    let version_len = usize::try_from(u32_at(data, metadata + 12)?)
+        .map_err(|_| "CLR version length overflow".to_owned())?;
     if version_len > 4096 {
         return Err("CLR version string too large".to_owned());
     }
@@ -130,11 +140,17 @@ fn parse_streams(data: &[u8], sections: &[Section], clr_rva: u32) -> Result<Stre
     };
     let mut cursor = header + 4;
     for _ in 0..count {
-        let relative = usize::try_from(u32_at(data, cursor)?).map_err(|_| "stream offset overflow".to_owned())?;
-        let size = usize::try_from(u32_at(data, cursor + 4)?).map_err(|_| "stream size overflow".to_owned())?;
+        let relative = usize::try_from(u32_at(data, cursor)?)
+            .map_err(|_| "stream offset overflow".to_owned())?;
+        let size = usize::try_from(u32_at(data, cursor + 4)?)
+            .map_err(|_| "stream size overflow".to_owned())?;
         cursor += 8;
         let start = cursor;
-        while *data.get(cursor).ok_or_else(|| "truncated CLR stream name".to_owned())? != 0 {
+        while *data
+            .get(cursor)
+            .ok_or_else(|| "truncated CLR stream name".to_owned())?
+            != 0
+        {
             cursor += 1;
             if cursor.saturating_sub(start) > 32 {
                 return Err("CLR stream name too long".to_owned());
@@ -142,7 +158,9 @@ fn parse_streams(data: &[u8], sections: &[Section], clr_rva: u32) -> Result<Stre
         }
         let name = String::from_utf8_lossy(&data[start..cursor]).into_owned();
         cursor = align4(cursor + 1);
-        let absolute = metadata.checked_add(relative).ok_or_else(|| "CLR stream offset overflow".to_owned())?;
+        let absolute = metadata
+            .checked_add(relative)
+            .ok_or_else(|| "CLR stream offset overflow".to_owned())?;
         checked_slice(data, absolute, size)?;
         match name.as_str() {
             "#Strings" => streams.strings = Some((absolute, size)),
@@ -196,24 +214,23 @@ fn compressed_uint(data: &[u8], pos: &mut usize, end: usize) -> Result<u32, Stri
             return Err("compressed integer exceeds blob".to_owned());
         }
         *pos += 3;
-        return Ok(
-            (u32::from(first & 0x1f) << 24)
-                | (u32::from(bytes[0]) << 16)
-                | (u32::from(bytes[1]) << 8)
-                | u32::from(bytes[2]),
-        );
+        return Ok((u32::from(first & 0x1f) << 24)
+            | (u32::from(bytes[0]) << 16)
+            | (u32::from(bytes[1]) << 8)
+            | u32::from(bytes[2]));
     }
     Err("invalid compressed integer".to_owned())
 }
 
-fn blob<'a>(data: &'a [u8], stream: (usize, usize), index: u32) -> Result<&'a [u8], String> {
+fn blob(data: &[u8], stream: (usize, usize), index: u32) -> Result<&[u8], String> {
     let index = usize::try_from(index).map_err(|_| "blob index overflow".to_owned())?;
     if index >= stream.1 {
         return Err("blob index outside heap".to_owned());
     }
     let mut pos = stream.0 + index;
     let end = stream.0 + stream.1;
-    let len = usize::try_from(compressed_uint(data, &mut pos, end)?).map_err(|_| "blob length overflow".to_owned())?;
+    let len = usize::try_from(compressed_uint(data, &mut pos, end)?)
+        .map_err(|_| "blob length overflow".to_owned())?;
     if pos.saturating_add(len) > end {
         return Err("blob exceeds heap".to_owned());
     }
@@ -226,7 +243,11 @@ fn table_index_size(rows: &[u32; 64], table: usize) -> usize {
 
 fn coded_index_size(rows: &[u32; 64], tables: &[usize], tag_bits: u32) -> usize {
     let max_rows = tables.iter().map(|index| rows[*index]).max().unwrap_or(0);
-    if max_rows < (1u32 << (16 - tag_bits)) { 2 } else { 4 }
+    if max_rows < (1u32 << (16 - tag_bits)) {
+        2
+    } else {
+        4
+    }
 }
 
 fn read_index(data: &[u8], pos: &mut usize, size: usize) -> Result<u32, String> {
@@ -239,7 +260,13 @@ fn read_index(data: &[u8], pos: &mut usize, size: usize) -> Result<u32, String> 
     Ok(value)
 }
 
-fn table_row_size(table: usize, rows: &[u32; 64], string_size: usize, guid_size: usize, blob_size: usize) -> Result<usize, String> {
+fn table_row_size(
+    table: usize,
+    rows: &[u32; 64],
+    string_size: usize,
+    guid_size: usize,
+    blob_size: usize,
+) -> Result<usize, String> {
     let simple = |index| table_index_size(rows, index);
     let coded = |tables: &[usize], bits| coded_index_size(rows, tables, bits);
     Ok(match table {
@@ -250,15 +277,25 @@ fn table_row_size(table: usize, rows: &[u32; 64], string_size: usize, guid_size:
         4 => 2 + string_size + blob_size,
         5 => simple(6),
         6 => 4 + 2 + 2 + string_size + blob_size + simple(8),
-        _ => return Err(format!("unsupported metadata table {table} before MethodDef")),
+        _ => {
+            return Err(format!(
+                "unsupported metadata table {table} before MethodDef"
+            ));
+        }
     })
 }
 
 fn parse_tables(data: &[u8], streams: &Streams) -> Result<(Vec<TypeDef>, Vec<MethodDef>), String> {
-    let strings = streams.strings.ok_or_else(|| "CLR #Strings stream missing".to_owned())?;
-    let (tables_off, tables_size) = streams.tables.ok_or_else(|| "CLR tables stream missing".to_owned())?;
+    let strings = streams
+        .strings
+        .ok_or_else(|| "CLR #Strings stream missing".to_owned())?;
+    let (tables_off, tables_size) = streams
+        .tables
+        .ok_or_else(|| "CLR tables stream missing".to_owned())?;
     checked_slice(data, tables_off, tables_size)?;
-    let heap_sizes = *data.get(tables_off + 6).ok_or_else(|| "truncated CLR tables header".to_owned())?;
+    let heap_sizes = *data
+        .get(tables_off + 6)
+        .ok_or_else(|| "truncated CLR tables header".to_owned())?;
     let valid = u64_at(data, tables_off + 8)?;
     let string_size = if heap_sizes & 1 != 0 { 4 } else { 2 };
     let guid_size = if heap_sizes & 2 != 0 { 4 } else { 2 };
@@ -278,8 +315,11 @@ fn parse_tables(data: &[u8], streams: &Streams) -> Result<(Vec<TypeDef>, Vec<Met
             continue;
         }
         let row_size = table_row_size(table, &rows, string_size, guid_size, blob_size)?;
-        let count = usize::try_from(rows[table]).map_err(|_| "metadata row count overflow".to_owned())?;
-        let bytes = count.checked_mul(row_size).ok_or_else(|| "metadata table size overflow".to_owned())?;
+        let count =
+            usize::try_from(rows[table]).map_err(|_| "metadata row count overflow".to_owned())?;
+        let bytes = count
+            .checked_mul(row_size)
+            .ok_or_else(|| "metadata table size overflow".to_owned())?;
         checked_slice(data, cursor, bytes)?;
         if table == 2 {
             let extends_size = coded_index_size(&rows, &[2, 1, 27], 2);
@@ -395,10 +435,20 @@ fn method_access(flags: u16) -> String {
         6 => out.push("public"),
         _ => {}
     }
-    if flags & 0x10 != 0 { out.push("static"); }
-    if flags & 0x40 != 0 { out.push("virtual"); }
-    if flags & 0x400 != 0 { out.push("abstract"); }
-    if out.is_empty() { String::new() } else { format!("{} ", out.join(" ")) }
+    if flags & 0x10 != 0 {
+        out.push("static");
+    }
+    if flags & 0x40 != 0 {
+        out.push("virtual");
+    }
+    if flags & 0x400 != 0 {
+        out.push("abstract");
+    }
+    if out.is_empty() {
+        String::new()
+    } else {
+        format!("{} ", out.join(" "))
+    }
 }
 
 fn il_name(op: u16) -> &'static str {
@@ -437,13 +487,29 @@ fn operand_len(op: u16, code: &[u8], pos: usize) -> usize {
     match op {
         0x0e..=0x13 | 0x1f | 0x2b..=0x37 | 0xde => 1,
         0xfe09..=0xfe0e => 2,
-        0x20 | 0x22 | 0x27..=0x29 | 0x38..=0x44 | 0x6f..=0x75 | 0x7b..=0x81 | 0x8c
-        | 0x8d | 0xd0 | 0xdd | 0xfe15 | 0xfe16 | 0xfe1c => 4,
+        0x20
+        | 0x22
+        | 0x27..=0x29
+        | 0x38..=0x44
+        | 0x6f..=0x75
+        | 0x7b..=0x81
+        | 0x8c
+        | 0x8d
+        | 0xd0
+        | 0xdd
+        | 0xfe15
+        | 0xfe16
+        | 0xfe1c => 4,
         0x21 | 0x23 => 8,
         0x45 if pos + 4 <= code.len() => 4usize.saturating_add(
-            usize::try_from(u32::from_le_bytes([code[pos], code[pos + 1], code[pos + 2], code[pos + 3]]))
-                .unwrap_or(0)
-                .saturating_mul(4),
+            usize::try_from(u32::from_le_bytes([
+                code[pos],
+                code[pos + 1],
+                code[pos + 2],
+                code[pos + 3],
+            ]))
+            .unwrap_or(0)
+            .saturating_mul(4),
         ),
         _ => 0,
     }
@@ -492,7 +558,9 @@ fn disassemble_il(data: &[u8], sections: &[Section], rva: u32) -> String {
         let mut op = u16::from(code[pc]);
         pc += 1;
         if op == 0xfe {
-            let Some(second) = code.get(pc).copied() else { break; };
+            let Some(second) = code.get(pc).copied() else {
+                break;
+            };
             pc += 1;
             op = 0xfe00 | u16::from(second);
         }
@@ -503,7 +571,11 @@ fn disassemble_il(data: &[u8], sections: &[Section], rva: u32) -> String {
             .map(|byte| format!("{byte:02x}"))
             .collect::<Vec<_>>()
             .join(" ");
-        let _ = writeln!(out, "        // IL_{start:04x}: {:<16} {operand}", il_name(op));
+        let _ = writeln!(
+            out,
+            "        // IL_{start:04x}: {:<16} {operand}",
+            il_name(op)
+        );
         if end == pc && requested != 0 {
             break;
         }
@@ -540,12 +612,18 @@ pub fn decompile_dotnet(data: &[u8]) -> Result<String, String> {
         let start = usize::try_from(ty.method_list.saturating_sub(1)).unwrap_or(0);
         let end = types
             .get(type_index + 1)
-            .map(|next| usize::try_from(next.method_list.saturating_sub(1)).unwrap_or(methods.len()))
+            .map(|next| {
+                usize::try_from(next.method_list.saturating_sub(1)).unwrap_or(methods.len())
+            })
             .unwrap_or(methods.len())
             .min(methods.len());
         for method in methods.get(start..end).unwrap_or(&[]) {
             let signature = method_signature(data, &streams, method);
-            let _ = writeln!(out, "{indent}    {}{signature} {{", method_access(method.flags));
+            let _ = writeln!(
+                out,
+                "{indent}    {}{signature} {{",
+                method_access(method.flags)
+            );
             out.push_str(&disassemble_il(data, &sections, method.rva));
             let _ = writeln!(out, "{indent}    }}\n");
         }
@@ -569,7 +647,10 @@ mod tests {
     fn compressed_int_one_byte() {
         let data = [0x7f];
         let mut pos = 0;
-        assert_eq!(compressed_uint(&data, &mut pos, data.len()).expect("compressed"), 127);
+        assert_eq!(
+            compressed_uint(&data, &mut pos, data.len()).expect("compressed"),
+            127
+        );
     }
 
     #[test]

@@ -9,6 +9,6 @@ pub mod i18n;
 pub mod model;
 
 pub use capabilities::capabilities;
-pub use decompile::{decompile, default_output, DecompileError};
+pub use decompile::{DecompileError, decompile, default_output};
 pub use detect::detect;
 pub use model::{Capability, DecompileOptions, DecompileResult, Detection, FileKind};

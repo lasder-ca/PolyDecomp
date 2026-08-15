@@ -1,4 +1,4 @@
-use super::{checked_slice, read_uleb, MAX_ARCHIVE_ENTRIES, MAX_ARCHIVE_MEMBER, MAX_ARCHIVE_TOTAL};
+use super::{MAX_ARCHIVE_ENTRIES, MAX_ARCHIVE_MEMBER, MAX_ARCHIVE_TOTAL, checked_slice, read_uleb};
 use std::fmt::Write as _;
 use std::io::{Cursor, Read};
 use zip::ZipArchive;
@@ -227,10 +227,7 @@ impl<'a> DexFile<'a> {
     }
 
     fn type_desc(&self, idx: u32) -> &str {
-        let Some(string_idx) = self
-            .types
-            .get(usize::try_from(idx).unwrap_or(usize::MAX))
-        else {
+        let Some(string_idx) = self.types.get(usize::try_from(idx).unwrap_or(usize::MAX)) else {
             return "Ljava/lang/Object;";
         };
         self.strings
@@ -483,11 +480,40 @@ fn dex_mnemonic(op: u8) -> &'static str {
 
 fn dex_len(op: u8) -> usize {
     match op {
-        0x02 | 0x05 | 0x08 | 0x13 | 0x15 | 0x16 | 0x19 | 0x1a | 0x1c | 0x1f | 0x20 | 0x22
-        | 0x23 | 0x29 | 0x2d..=0x31 | 0x32..=0x3d | 0x44..=0x51 | 0x52..=0x6d
-        | 0x90..=0xaf | 0xd0..=0xe2 | 0xfe | 0xff => 2,
-        0x03 | 0x06 | 0x09 | 0x14 | 0x17 | 0x1b | 0x24..=0x26 | 0x2a..=0x2c | 0x6e..=0x72
-        | 0x74..=0x78 | 0xfc | 0xfd => 3,
+        0x02
+        | 0x05
+        | 0x08
+        | 0x13
+        | 0x15
+        | 0x16
+        | 0x19
+        | 0x1a
+        | 0x1c
+        | 0x1f
+        | 0x20
+        | 0x22
+        | 0x23
+        | 0x29
+        | 0x2d..=0x31
+        | 0x32..=0x3d
+        | 0x44..=0x51
+        | 0x52..=0x6d
+        | 0x90..=0xaf
+        | 0xd0..=0xe2
+        | 0xfe
+        | 0xff => 2,
+        0x03
+        | 0x06
+        | 0x09
+        | 0x14
+        | 0x17
+        | 0x1b
+        | 0x24..=0x26
+        | 0x2a..=0x2c
+        | 0x6e..=0x72
+        | 0x74..=0x78
+        | 0xfc
+        | 0xfd => 3,
         0xfa | 0xfb => 4,
         0x18 => 5,
         _ => 1,
@@ -522,11 +548,7 @@ fn disassemble_code(data: &[u8], code_off: u32) -> Result<String, String> {
             .map(|v| format!("{v:04x}"))
             .collect::<Vec<_>>()
             .join(" ");
-        let _ = writeln!(
-            out,
-            "        // {pc:04x}: {:<28} {words}",
-            dex_mnemonic(op)
-        );
+        let _ = writeln!(out, "        // {pc:04x}: {:<28} {words}", dex_mnemonic(op));
         pc += len;
     }
     Ok(out)
@@ -564,10 +586,10 @@ fn render_class(dex: &DexFile<'_>, class: &ClassDef) -> Result<(String, String),
     }
     out.push_str("// Decompiled by PolyDecomp built-in DEX engine\n");
     let _ = write!(out, "{}class {simple}", access_words(class.access, false));
-    if let Some(parent) = parent {
-        if parent != "java.lang.Object" {
-            let _ = write!(out, " extends {parent}");
-        }
+    if let Some(parent) = parent
+        && parent != "java.lang.Object"
+    {
+        let _ = write!(out, " extends {parent}");
     }
     out.push_str(" {\n");
     for encoded in parse_class_data(dex.data, class.class_data_off)? {

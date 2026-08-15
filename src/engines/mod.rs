@@ -28,10 +28,6 @@ impl<'a> Reader<'a> {
         self.pos
     }
 
-    pub const fn remaining(&self) -> usize {
-        self.data.len().saturating_sub(self.pos)
-    }
-
     pub fn seek(&mut self, pos: usize) -> Result<(), String> {
         if pos > self.data.len() {
             return Err("offset outside input".to_owned());
@@ -41,12 +37,18 @@ impl<'a> Reader<'a> {
     }
 
     pub fn skip(&mut self, len: usize) -> Result<(), String> {
-        let next = self.pos.checked_add(len).ok_or_else(|| "offset overflow".to_owned())?;
+        let next = self
+            .pos
+            .checked_add(len)
+            .ok_or_else(|| "offset overflow".to_owned())?;
         self.seek(next)
     }
 
     pub fn take(&mut self, len: usize) -> Result<&'a [u8], String> {
-        let end = self.pos.checked_add(len).ok_or_else(|| "length overflow".to_owned())?;
+        let end = self
+            .pos
+            .checked_add(len)
+            .ok_or_else(|| "length overflow".to_owned())?;
         if end > self.data.len() {
             return Err("truncated input".to_owned());
         }
@@ -81,20 +83,27 @@ impl<'a> Reader<'a> {
 
     pub fn le_u64(&mut self) -> Result<u64, String> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 }
 
 pub fn checked_slice(data: &[u8], offset: usize, len: usize) -> Result<&[u8], String> {
-    let end = offset.checked_add(len).ok_or_else(|| "range overflow".to_owned())?;
-    data.get(offset..end).ok_or_else(|| "range outside input".to_owned())
+    let end = offset
+        .checked_add(len)
+        .ok_or_else(|| "range overflow".to_owned())?;
+    data.get(offset..end)
+        .ok_or_else(|| "range outside input".to_owned())
 }
 
 pub fn read_uleb(data: &[u8], pos: &mut usize) -> Result<u32, String> {
     let mut value = 0u32;
     let mut shift = 0u32;
     for _ in 0..5 {
-        let byte = *data.get(*pos).ok_or_else(|| "truncated ULEB128".to_owned())?;
+        let byte = *data
+            .get(*pos)
+            .ok_or_else(|| "truncated ULEB128".to_owned())?;
         *pos += 1;
         value |= u32::from(byte & 0x7f) << shift;
         if byte & 0x80 == 0 {
@@ -112,23 +121,21 @@ pub fn printable_strings(data: &[u8], min_len: usize, max: usize) -> Vec<String>
         let printable = matches!(byte, 0x20..=0x7e) || byte >= 0xc2;
         if printable {
             start.get_or_insert(index);
-        } else if let Some(begin) = start.take() {
-            if index.saturating_sub(begin) >= min_len {
-                if let Ok(text) = std::str::from_utf8(&data[begin..index]) {
-                    out.push(text.to_owned());
-                    if out.len() >= max {
-                        return out;
-                    }
-                }
+        } else if let Some(begin) = start.take()
+            && index.saturating_sub(begin) >= min_len
+            && let Ok(text) = std::str::from_utf8(&data[begin..index])
+        {
+            out.push(text.to_owned());
+            if out.len() >= max {
+                return out;
             }
         }
     }
-    if let Some(begin) = start {
-        if data.len().saturating_sub(begin) >= min_len {
-            if let Ok(text) = std::str::from_utf8(&data[begin..]) {
-                out.push(text.to_owned());
-            }
-        }
+    if let Some(begin) = start
+        && data.len().saturating_sub(begin) >= min_len
+        && let Ok(text) = std::str::from_utf8(&data[begin..])
+    {
+        out.push(text.to_owned());
     }
     out.truncate(max);
     out
@@ -149,7 +156,11 @@ pub fn hexdump(data: &[u8], base: u64, max_bytes: usize) -> String {
         }
         out.push(' ');
         for byte in chunk {
-            let c = if matches!(*byte, 0x20..=0x7e) { *byte as char } else { '.' };
+            let c = if matches!(*byte, 0x20..=0x7e) {
+                *byte as char
+            } else {
+                '.'
+            };
             out.push(c);
         }
         out.push('\n');

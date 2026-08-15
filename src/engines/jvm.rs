@@ -113,7 +113,8 @@ fn skip_attributes(reader: &mut Reader<'_>) -> Result<(), String> {
     let count = reader.be_u16()?;
     for _ in 0..count {
         reader.skip(2)?;
-        let len = usize::try_from(reader.be_u32()?).map_err(|_| "JVM attribute length overflow".to_owned())?;
+        let len = usize::try_from(reader.be_u32()?)
+            .map_err(|_| "JVM attribute length overflow".to_owned())?;
         reader.skip(len)?;
     }
     Ok(())
@@ -142,7 +143,10 @@ fn parse_type(descriptor: &str, position: &mut usize) -> String {
             while bytes.get(*position).is_some_and(|value| *value != b';') {
                 *position += 1;
             }
-            descriptor.get(start..*position).unwrap_or("Object").replace('/', ".")
+            descriptor
+                .get(start..*position)
+                .unwrap_or("Object")
+                .replace('/', ".")
         }
         _ => "Object".to_owned(),
     };
@@ -168,14 +172,32 @@ fn method_descriptor(descriptor: &str) -> (Vec<String>, String) {
 
 fn modifiers(flags: u16) -> String {
     let mut words = Vec::new();
-    if flags & 0x0001 != 0 { words.push("public"); }
-    if flags & 0x0002 != 0 { words.push("private"); }
-    if flags & 0x0004 != 0 { words.push("protected"); }
-    if flags & 0x0008 != 0 { words.push("static"); }
-    if flags & 0x0010 != 0 { words.push("final"); }
-    if flags & 0x0100 != 0 { words.push("native"); }
-    if flags & 0x0400 != 0 { words.push("abstract"); }
-    if words.is_empty() { String::new() } else { format!("{} ", words.join(" ")) }
+    if flags & 0x0001 != 0 {
+        words.push("public");
+    }
+    if flags & 0x0002 != 0 {
+        words.push("private");
+    }
+    if flags & 0x0004 != 0 {
+        words.push("protected");
+    }
+    if flags & 0x0008 != 0 {
+        words.push("static");
+    }
+    if flags & 0x0010 != 0 {
+        words.push("final");
+    }
+    if flags & 0x0100 != 0 {
+        words.push("native");
+    }
+    if flags & 0x0400 != 0 {
+        words.push("abstract");
+    }
+    if words.is_empty() {
+        String::new()
+    } else {
+        format!("{} ", words.join(" "))
+    }
 }
 
 fn opcode_name(opcode: u8) -> &'static str {
@@ -222,8 +244,18 @@ fn opcode_name(opcode: u8) -> &'static str {
 fn fixed_instruction_len(opcode: u8) -> usize {
     match opcode {
         0x10 | 0x12 | 0x15..=0x19 | 0x36..=0x3a | 0xa9 | 0xbc => 2,
-        0x11 | 0x13 | 0x14 | 0x84 | 0x99..=0xa8 | 0xb2..=0xb8 | 0xbb | 0xbd | 0xc0
-        | 0xc1 | 0xc6 | 0xc7 => 3,
+        0x11
+        | 0x13
+        | 0x14
+        | 0x84
+        | 0x99..=0xa8
+        | 0xb2..=0xb8
+        | 0xbb
+        | 0xbd
+        | 0xc0
+        | 0xc1
+        | 0xc6
+        | 0xc7 => 3,
         0xc5 => 4,
         0xb9 | 0xba | 0xc8 | 0xc9 => 5,
         _ => 1,
@@ -236,13 +268,19 @@ fn be_i32(code: &[u8], offset: usize) -> Option<i32> {
 }
 
 fn instruction_len(code: &[u8], pc: usize) -> usize {
-    let Some(opcode) = code.get(pc).copied() else { return 1; };
+    let Some(opcode) = code.get(pc).copied() else {
+        return 1;
+    };
     match opcode {
         0xaa => {
             let padding = (4 - ((pc + 1) & 3)) & 3;
             let base = pc + 1 + padding;
-            let Some(low) = be_i32(code, base + 4) else { return code.len() - pc; };
-            let Some(high) = be_i32(code, base + 8) else { return code.len() - pc; };
+            let Some(low) = be_i32(code, base + 4) else {
+                return code.len() - pc;
+            };
+            let Some(high) = be_i32(code, base + 8) else {
+                return code.len() - pc;
+            };
             let entries = high.saturating_sub(low).saturating_add(1).max(0) as usize;
             1usize
                 .saturating_add(padding)
@@ -252,7 +290,9 @@ fn instruction_len(code: &[u8], pc: usize) -> usize {
         0xab => {
             let padding = (4 - ((pc + 1) & 3)) & 3;
             let base = pc + 1 + padding;
-            let Some(pairs) = be_i32(code, base + 4) else { return code.len() - pc; };
+            let Some(pairs) = be_i32(code, base + 4) else {
+                return code.len() - pc;
+            };
             1usize
                 .saturating_add(padding)
                 .saturating_add(8)
@@ -276,9 +316,14 @@ fn code_text(code: &[u8], cp: &[Cp]) -> String {
         let end = pc.saturating_add(requested).min(code.len());
         let operands = &code[pc + 1..end];
         let detail = if opcode == 0x12 {
-            operands.first().map(|index| cp_text(cp, u16::from(*index))).unwrap_or_default()
-        } else if matches!(opcode, 0x13 | 0x14 | 0xb2..=0xb9 | 0xbb | 0xbd | 0xc0 | 0xc1)
-            && operands.len() >= 2
+            operands
+                .first()
+                .map(|index| cp_text(cp, u16::from(*index)))
+                .unwrap_or_default()
+        } else if matches!(
+            opcode,
+            0x13 | 0x14 | 0xb2..=0xb9 | 0xbb | 0xbd | 0xc0 | 0xc1
+        ) && operands.len() >= 2
         {
             cp_text(cp, u16::from_be_bytes([operands[0], operands[1]]))
         } else {
@@ -289,7 +334,11 @@ fn code_text(code: &[u8], cp: &[Cp]) -> String {
                 .collect::<Vec<_>>()
                 .join(" ")
         };
-        let _ = writeln!(out, "        // {pc:04x}: {:<20} {detail}", opcode_name(opcode));
+        let _ = writeln!(
+            out,
+            "        // {pc:04x}: {:<20} {detail}",
+            opcode_name(opcode)
+        );
         if end == code.len() && requested > end.saturating_sub(pc) {
             break;
         }
@@ -309,8 +358,13 @@ pub fn decompile_class(data: &[u8]) -> Result<String, String> {
     let access = reader.be_u16()?;
     let this_class = reader.be_u16()?;
     let super_class = reader.be_u16()?;
-    let class_name = cp_class(&cp, this_class).ok_or_else(|| "invalid JVM class name".to_owned())?;
-    let parent = if super_class == 0 { None } else { cp_class(&cp, super_class) };
+    let class_name =
+        cp_class(&cp, this_class).ok_or_else(|| "invalid JVM class name".to_owned())?;
+    let parent = if super_class == 0 {
+        None
+    } else {
+        cp_class(&cp, super_class)
+    };
 
     let interface_count = usize::from(reader.be_u16()?);
     let mut interfaces = Vec::with_capacity(interface_count);
@@ -337,15 +391,18 @@ pub fn decompile_class(data: &[u8]) -> Result<String, String> {
         "// Decompiled by PolyDecomp built-in JVM engine; class version {major}\n{}{kind} {simple}",
         modifiers(access)
     );
-    if kind == "class" {
-        if let Some(parent) = parent {
-            if parent != "java.lang.Object" {
-                let _ = write!(out, " extends {parent}");
-            }
-        }
+    if kind == "class"
+        && let Some(parent) = parent
+        && parent != "java.lang.Object"
+    {
+        let _ = write!(out, " extends {parent}");
     }
     if !interfaces.is_empty() {
-        let keyword = if kind == "interface" { "extends" } else { "implements" };
+        let keyword = if kind == "interface" {
+            "extends"
+        } else {
+            "implements"
+        };
         let _ = write!(out, " {keyword} {}", interfaces.join(", "));
     }
     out.push_str(" {\n");
@@ -354,7 +411,9 @@ pub fn decompile_class(data: &[u8]) -> Result<String, String> {
     for _ in 0..field_count {
         let flags = reader.be_u16()?;
         let name = cp_utf8(&cp, reader.be_u16()?).unwrap_or("field").to_owned();
-        let descriptor = cp_utf8(&cp, reader.be_u16()?).unwrap_or("Ljava/lang/Object;").to_owned();
+        let descriptor = cp_utf8(&cp, reader.be_u16()?)
+            .unwrap_or("Ljava/lang/Object;")
+            .to_owned();
         skip_attributes(&mut reader)?;
         let mut position = 0usize;
         let _ = writeln!(
@@ -368,7 +427,9 @@ pub fn decompile_class(data: &[u8]) -> Result<String, String> {
     let method_count = reader.be_u16()?;
     for _ in 0..method_count {
         let flags = reader.be_u16()?;
-        let name = cp_utf8(&cp, reader.be_u16()?).unwrap_or("method").to_owned();
+        let name = cp_utf8(&cp, reader.be_u16()?)
+            .unwrap_or("method")
+            .to_owned();
         let descriptor = cp_utf8(&cp, reader.be_u16()?).unwrap_or("()V").to_owned();
         let attribute_count = reader.be_u16()?;
         let mut body = None;
@@ -376,12 +437,14 @@ pub fn decompile_class(data: &[u8]) -> Result<String, String> {
         let mut max_locals = 0u16;
         for _ in 0..attribute_count {
             let attribute_name = cp_utf8(&cp, reader.be_u16()?).unwrap_or("").to_owned();
-            let length = usize::try_from(reader.be_u32()?).map_err(|_| "JVM attribute length overflow".to_owned())?;
+            let length = usize::try_from(reader.be_u32()?)
+                .map_err(|_| "JVM attribute length overflow".to_owned())?;
             if attribute_name == "Code" {
                 let start = reader.position();
                 max_stack = reader.be_u16()?;
                 max_locals = reader.be_u16()?;
-                let code_len = usize::try_from(reader.be_u32()?).map_err(|_| "JVM method size overflow".to_owned())?;
+                let code_len = usize::try_from(reader.be_u32()?)
+                    .map_err(|_| "JVM method size overflow".to_owned())?;
                 if code_len > 64 * 1024 * 1024 {
                     return Err("JVM method exceeds safety limit".to_owned());
                 }
@@ -420,7 +483,10 @@ pub fn decompile_class(data: &[u8]) -> Result<String, String> {
             );
         }
         if let Some(code) = body {
-            let _ = writeln!(out, "        // max_stack={max_stack}, max_locals={max_locals}");
+            let _ = writeln!(
+                out,
+                "        // max_stack={max_stack}, max_locals={max_locals}"
+            );
             out.push_str(&code_text(&code, &cp));
         } else {
             out.push_str("        // abstract/native method: no Code attribute\n");
@@ -442,7 +508,8 @@ fn safe_name(name: &str) -> String {
 }
 
 pub fn decompile_jar(data: &[u8]) -> Result<Vec<(String, String)>, String> {
-    let mut archive = ZipArchive::new(Cursor::new(data)).map_err(|error| format!("invalid JAR: {error}"))?;
+    let mut archive =
+        ZipArchive::new(Cursor::new(data)).map_err(|error| format!("invalid JAR: {error}"))?;
     if archive.len() > MAX_ARCHIVE_ENTRIES {
         return Err("JAR contains too many entries".to_owned());
     }
@@ -460,10 +527,16 @@ pub fn decompile_jar(data: &[u8]) -> Result<Vec<(String, String)>, String> {
         if total > MAX_ARCHIVE_TOTAL {
             return Err("JAR expanded size exceeds safety limit".to_owned());
         }
-        let output_name = format!("{}.java", safe_name(entry.name()).trim_end_matches(".class"));
+        let output_name = format!(
+            "{}.java",
+            safe_name(entry.name()).trim_end_matches(".class")
+        );
         let mut bytes = Vec::with_capacity(usize::try_from(entry.size()).unwrap_or(0));
-        entry.read_to_end(&mut bytes).map_err(|error| error.to_string())?;
-        let source = decompile_class(&bytes).unwrap_or_else(|error| format!("// class parse failed: {error}\n"));
+        entry
+            .read_to_end(&mut bytes)
+            .map_err(|error| error.to_string())?;
+        let source = decompile_class(&bytes)
+            .unwrap_or_else(|error| format!("// class parse failed: {error}\n"));
         output.push((output_name, source));
     }
     if output.is_empty() {

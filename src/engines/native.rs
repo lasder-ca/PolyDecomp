@@ -1,6 +1,8 @@
 use super::{hexdump, printable_strings};
 use iced_x86::{Decoder, DecoderOptions, Formatter, NasmFormatter};
-use object::{Architecture, Object, ObjectSection, ObjectSymbol, SectionIndex, SectionKind, SymbolKind};
+use object::{
+    Architecture, Object, ObjectSection, ObjectSymbol, SectionIndex, SectionKind, SymbolKind,
+};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -38,7 +40,9 @@ fn x86_disassembly(bytes: &[u8], address: u64, bitness: u32, indent: &str) -> St
         let _ = writeln!(out, "{indent}// 0x{ip:016x}: {formatted}");
         count += 1;
     }
-    if decoder.can_decode() { let _ = writeln!(out, "{indent}// ... instruction limit reached ..."); }
+    if decoder.can_decode() {
+        let _ = writeln!(out, "{indent}// ... instruction limit reached ...");
+    }
     out
 }
 
@@ -48,7 +52,9 @@ fn sign_extend(value: u32, bits: u32) -> i64 {
 }
 
 fn aarch64_instruction(word: u32, pc: u64) -> String {
-    if word == 0xd65f_03c0 { return "return; // ret".to_owned(); }
+    if word == 0xd65f_03c0 {
+        return "return; // ret".to_owned();
+    }
     if word & 0xfc00_0000 == 0x1400_0000 {
         let imm = sign_extend(word & 0x03ff_ffff, 26) << 2;
         let target = pc.wrapping_add_signed(imm);
@@ -81,7 +87,9 @@ fn aarch64_instruction(word: u32, pc: u64) -> String {
         let hw = (word >> 21) & 0x3;
         return format!("x{rd} = 0x{:x}; // mov wide", u64::from(imm16) << (hw * 16));
     }
-    if word == 0xd503_201f { return "/* nop */".to_owned(); }
+    if word == 0xd503_201f {
+        return "/* nop */".to_owned();
+    }
     format!("/* .word 0x{word:08x} */")
 }
 
@@ -98,24 +106,49 @@ fn aarch64_disassembly(bytes: &[u8], address: u64, indent: &str) -> String {
 
 fn render_function(file: &object::File<'_>, function: &Function, arch: Architecture) -> String {
     let mut out = String::new();
-    let Ok(section) = file.section_by_index(function.section) else { return out; };
-    let Ok(section_data) = section.data() else { return out; };
+    let Ok(section) = file.section_by_index(function.section) else {
+        return out;
+    };
+    let Ok(section_data) = section.data() else {
+        return out;
+    };
     let section_address = section.address();
-    let Some(delta) = function.address.checked_sub(section_address) else { return out; };
-    let Ok(start) = usize::try_from(delta) else { return out; };
-    if start >= section_data.len() { return out; }
+    let Some(delta) = function.address.checked_sub(section_address) else {
+        return out;
+    };
+    let Ok(start) = usize::try_from(delta) else {
+        return out;
+    };
+    if start >= section_data.len() {
+        return out;
+    }
     let requested = usize::try_from(function.size).unwrap_or(0);
-    let size = if requested == 0 { section_data.len().saturating_sub(start).min(64 * 1024) } else { requested };
+    let size = if requested == 0 {
+        section_data.len().saturating_sub(start).min(64 * 1024)
+    } else {
+        requested
+    };
     let end = start.saturating_add(size).min(section_data.len());
     let bytes = &section_data[start..end];
-    let safe_name = function.name.replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_");
-    let _ = writeln!(out, "void {safe_name}(void) {{ // 0x{:x}, {} bytes", function.address, bytes.len());
+    let safe_name = function
+        .name
+        .replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_");
+    let _ = writeln!(
+        out,
+        "void {safe_name}(void) {{ // 0x{:x}, {} bytes",
+        function.address,
+        bytes.len()
+    );
     match arch {
         Architecture::X86_64 => out.push_str(&x86_disassembly(bytes, function.address, 64, "    ")),
         Architecture::I386 => out.push_str(&x86_disassembly(bytes, function.address, 32, "    ")),
-        Architecture::Aarch64 => out.push_str(&aarch64_disassembly(bytes, function.address, "    ")),
+        Architecture::Aarch64 => {
+            out.push_str(&aarch64_disassembly(bytes, function.address, "    "))
+        }
         _ => {
-            out.push_str("    // Built-in semantic decoder for this architecture is not complete.\n");
+            out.push_str(
+                "    // Built-in semantic decoder for this architecture is not complete.\n",
+            );
             for line in hexdump(bytes, function.address, 128 * 1024).lines() {
                 let _ = writeln!(out, "    // {line}");
             }
@@ -128,21 +161,49 @@ fn render_function(file: &object::File<'_>, function: &Function, arch: Architect
 fn collect_functions(file: &object::File<'_>) -> Vec<Function> {
     let mut functions = Vec::new();
     for symbol in file.symbols().chain(file.dynamic_symbols()) {
-        if symbol.kind() != SymbolKind::Text || symbol.address() == 0 { continue; }
-        let Some(section) = symbol.section_index() else { continue; };
-        let name = symbol.name().ok().filter(|s| !s.is_empty()).unwrap_or("sub").to_owned();
-        functions.push(Function { name, address: symbol.address(), size: symbol.size(), section });
+        if symbol.kind() != SymbolKind::Text || symbol.address() == 0 {
+            continue;
+        }
+        let Some(section) = symbol.section_index() else {
+            continue;
+        };
+        let name = symbol
+            .name()
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("sub")
+            .to_owned();
+        functions.push(Function {
+            name,
+            address: symbol.address(),
+            size: symbol.size(),
+            section,
+        });
     }
     functions.sort_by_key(|f| (f.section.0, f.address));
     functions.dedup_by(|a, b| a.address == b.address && a.section == b.section);
-    if !functions.is_empty() { return functions; }
+    if !functions.is_empty() {
+        return functions;
+    }
 
     for section in file.sections() {
-        if section.kind() != SectionKind::Text { continue; }
+        if section.kind() != SectionKind::Text {
+            continue;
+        }
         let size = section.size();
-        if size == 0 { continue; }
-        let name = section.name().unwrap_or("text").replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_");
-        functions.push(Function { name: format!("section_{name}"), address: section.address(), size, section: section.index() });
+        if size == 0 {
+            continue;
+        }
+        let name = section
+            .name()
+            .unwrap_or("text")
+            .replace(|c: char| !(c.is_ascii_alphanumeric() || c == '_'), "_");
+        functions.push(Function {
+            name: format!("section_{name}"),
+            address: section.address(),
+            size,
+            section: section.index(),
+        });
     }
     functions
 }
@@ -153,7 +214,11 @@ pub fn decompile_native(data: &[u8]) -> Result<String, String> {
     let mut out = String::new();
     let _ = writeln!(out, "/* PolyDecomp built-in native decompiler");
     let _ = writeln!(out, " * format: {:?}", file.format());
-    let _ = writeln!(out, " * architecture: {} ({arch:?})", architecture_name(arch));
+    let _ = writeln!(
+        out,
+        " * architecture: {} ({arch:?})",
+        architecture_name(arch)
+    );
     let _ = writeln!(out, " * entry: 0x{:x}", file.entry());
     let _ = writeln!(out, " */\n");
 
@@ -171,7 +236,9 @@ pub fn decompile_native(data: &[u8]) -> Result<String, String> {
     let strings = printable_strings(data, 6, 2_000);
     if !strings.is_empty() {
         out.push_str("/* recovered strings (first 2000)\n");
-        for value in strings { let _ = writeln!(out, " * {:?}", value); }
+        for value in strings {
+            let _ = writeln!(out, " * {:?}", value);
+        }
         out.push_str(" */\n\n");
     }
 
@@ -182,7 +249,9 @@ pub fn decompile_native(data: &[u8]) -> Result<String, String> {
         for function in functions.iter().take(50_000) {
             out.push_str(&render_function(&file, function, arch));
         }
-        if functions.len() > 50_000 { out.push_str("/* function output truncated at safety limit */\n"); }
+        if functions.len() > 50_000 {
+            out.push_str("/* function output truncated at safety limit */\n");
+        }
     }
     Ok(out)
 }
