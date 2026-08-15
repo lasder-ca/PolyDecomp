@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polydecomp"
+version = "0.1.0"
+description = "Offline-first bilingual static decompilation and inspection workbench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "lasder-ca" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+]
+
+[project.scripts]
+polydecomp = "polydecomp.cli:main"
+polydecomp-gui = "polydecomp.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["polydecomp*"]
