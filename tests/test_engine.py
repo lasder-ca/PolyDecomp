@@ -25,6 +25,15 @@ class FormatTests(unittest.TestCase):
         info = detect_format(b"\xca\xfe\xba\xbe\x00\x00\x00=", ".class")
         self.assertEqual(info.name, "Java class")
 
+    def test_java_version_disambiguates_without_suffix(self) -> None:
+        info = detect_format(b"\xca\xfe\xba\xbe\x00\x00\x00=", "")
+        self.assertEqual(info.name, "Java class")
+
+    def test_fat_macho_architecture_count_remains_macho(self) -> None:
+        info = detect_format(b"\xca\xfe\xba\xbe\x00\x00\x00\x02", "")
+        self.assertEqual(info.name, "Mach-O")
+        self.assertEqual(info.metadata, {"class": "fat", "architecture_count": 2})
+
     def test_extracts_ascii_and_utf16_strings(self) -> None:
         findings = extract_strings(b"xx HELLO yy\x00W\x00O\x00R\x00L\x00D\x00")
         values = {finding.value for finding in findings}
