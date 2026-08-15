@@ -31,6 +31,28 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
 }
 
+fn looks_like_java_class(data: &[u8], ext: &str) -> bool {
+    if data.get(..4) != Some(JAVA_CLASS_MAGIC.as_slice()) {
+        return false;
+    }
+    if ext == "class" {
+        return true;
+    }
+
+    // 0xCAFEBABE is also the big-endian fat Mach-O magic. A Java class stores
+    // minor/major u16 versions followed by a non-zero constant-pool count,
+    // whereas fat Mach-O stores a u32 architecture count after the magic.
+    // Requiring a plausible Java major and a non-zero constant pool avoids
+    // classifying ordinary fat Mach-O headers as JVM bytecode when no suffix
+    // is available.
+    let Some(header) = data.get(4..10) else {
+        return false;
+    };
+    let major = u16::from_be_bytes([header[2], header[3]]);
+    let constant_pool_count = u16::from_be_bytes([header[4], header[5]]);
+    major >= 45 && constant_pool_count > 0
+}
+
 fn native_language(data: &[u8]) -> (&'static str, f32) {
     if contains_bytes(data, b"\xff Go buildinf:")
         || contains_bytes(data, b"runtime.main") && contains_bytes(data, b"runtime.morestack")
@@ -93,7 +115,7 @@ pub fn detect(path: &Path) -> Result<Detection, String> {
         .to_ascii_lowercase();
     let head4 = data.get(..4).unwrap_or(&[]);
 
-    if ext == "class" && head4 == JAVA_CLASS_MAGIC {
+    if looks_like_java_class(&data, &ext) {
         return Ok(Detection {
             kind: FileKind::JvmClass,
             language: "java/kotlin".to_owned(),
@@ -219,6 +241,21 @@ mod tests {
     fn detects_java_class() {
         let file = temp(".class", b"\xca\xfe\xba\xbe\x00\x00\x00\x34");
         assert_eq!(detect(file.path()).expect("detect").kind, FileKind::JvmClass);
+    }
+
+    #[test]
+    fn detects_java_class_without_extension() {
+        let file = temp("", b"\xca\xfe\xba\xbe\x00\x00\x00\x3d\x00\x01");
+        assert_eq!(detect(file.path()).expect("detect").kind, FileKind::JvmClass);
+    }
+
+    #[test]
+    fn keeps_fat_macho_with_cafebabe_magic_native() {
+        let file = temp(
+            "",
+            b"\xca\xfe\xba\xbe\x00\x00\x00\x02\x01\x00\x00\x07\x00\x00\x00\x03",
+        );
+        assert_eq!(detect(file.path()).expect("detect").kind, FileKind::Native);
     }
 
     #[test]
