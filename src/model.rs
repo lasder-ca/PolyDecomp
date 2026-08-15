@@ -35,7 +35,7 @@ impl FileKind {
     }
 
     pub const fn output_is_directory(self) -> bool {
-        matches!(self, Self::JvmJar | Self::AndroidDex | Self::AndroidApk | Self::DotNet)
+        matches!(self, Self::JvmJar | Self::AndroidDex | Self::AndroidApk)
     }
 }
 
@@ -48,35 +48,23 @@ pub struct Detection {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct Tool {
-    pub name: String,
-    pub path: Option<PathBuf>,
-    pub true_decompiler: bool,
+pub struct Capability {
+    pub format: String,
+    pub engine: String,
+    pub fidelity: String,
     pub notes: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DecompileOptions {
-    pub backend: String,
-    pub timeout_secs: u64,
     pub force: bool,
-}
-
-impl Default for DecompileOptions {
-    fn default() -> Self {
-        Self {
-            backend: "auto".to_owned(),
-            timeout_secs: 900,
-            force: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DecompileResult {
     pub input: PathBuf,
     pub output: PathBuf,
-    pub backend: String,
+    pub engine: String,
     pub detection: Detection,
-    pub true_decompiler: bool,
+    pub fidelity: String,
 }
