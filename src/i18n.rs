@@ -13,7 +13,7 @@ impl UiLanguage {
         }
     }
 
-    pub const fn text(self, key: &str) -> &'static str {
+    pub fn text(self, key: &str) -> &'static str {
         match (self, key) {
             (Self::Japanese, "subtitle") => "複数形式に対応したデコンパイラ・フロントエンド",
             (Self::English, "subtitle") => "Multi-format decompiler frontend",
