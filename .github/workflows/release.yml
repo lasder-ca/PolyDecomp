@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  prepare:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
+      skip: ${{ steps.version.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - id: version
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
+          TAG="v${VERSION}"
+          SHA='${{ github.event.workflow_run.head_sha }}'
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            gh release create "$TAG" --target "$SHA" --title "PolyDecomp $TAG" --notes-file RELEASE_NOTES.md --draft
+          fi
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            asset: polydecomp-windows-x86_64.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            asset: polydecomp-linux-x86_64
+          - name: macOS ARM64
+            os: macos-14
+            asset: polydecomp-macos-aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux GUI build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev libx11-dev pkg-config libssl-dev
+      - name: Build release binary
+        run: cargo build --release
+      - name: Stage Windows asset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Copy-Item target/release/polydecomp.exe '${{ matrix.asset }}'
+      - name: Stage Unix asset
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cp target/release/polydecomp '${{ matrix.asset }}'
+          chmod +x '${{ matrix.asset }}'
+      - name: Upload release asset
+        shell: bash
+        run: gh release upload '${{ needs.prepare.outputs.tag }}' '${{ matrix.asset }}' --clobber
+
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish draft release
+        run: gh release edit '${{ needs.prepare.outputs.tag }}' --repo '${{ github.repository }}' --draft=false
