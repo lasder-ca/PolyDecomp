@@ -5,6 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # eframe 0.36 requires Rust 1.95, while PolyDecomp supports Rust 1.92.
+      # Revisit this when the project's declared MSRV is intentionally raised.
+      - dependency-name: "eframe"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
