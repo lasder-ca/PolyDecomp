@@ -1,6 +1,8 @@
 use crate::detect::detect;
 use crate::engines::{self, dex, dotnet, jvm, lua, native, pyc, wasm};
-use crate::model::{DecompileOptions, DecompileResult, Detection, FileKind};
+use crate::model::{
+    DecompileOptions, DecompileResult, Detection, FileKind, NativeOutputFormat,
+};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -15,6 +17,14 @@ pub enum DecompileError {
 }
 
 pub fn default_output(input: &Path, kind: FileKind) -> PathBuf {
+    default_output_with_format(input, kind, NativeOutputFormat::C)
+}
+
+pub fn default_output_with_format(
+    input: &Path,
+    kind: FileKind,
+    native_format: NativeOutputFormat,
+) -> PathBuf {
     let stem = input
         .file_stem()
         .and_then(|value| value.to_str())
@@ -28,7 +38,10 @@ pub fn default_output(input: &Path, kind: FileKind) -> PathBuf {
         FileKind::LuaBytecode => input.with_file_name(format!("{stem}.decompiled.lua")),
         FileKind::Wasm => input.with_file_name(format!("{stem}.decompiled.wat")),
         FileKind::DotNet => input.with_file_name(format!("{stem}.decompiled.cs")),
-        FileKind::Native => input.with_file_name(format!("{stem}.decompiled.c")),
+        FileKind::Native => input.with_file_name(format!(
+            "{stem}.decompiled.{}",
+            native_format.extension()
+        )),
         FileKind::Source => input.with_file_name(format!("{stem}.copy.txt")),
         FileKind::Unknown => input.with_file_name(format!("{stem}.analysis.txt")),
     }
@@ -198,9 +211,10 @@ pub fn decompile(
         FileKind::Native => {
             fs::write(
                 output,
-                native::decompile_native(&data).map_err(DecompileError::Message)?,
+                native::decompile_native(&data, options.native_format)
+                    .map_err(DecompileError::Message)?,
             )?;
-            ("builtin-native", "medium")
+            ("builtin-native-cfg", "medium")
         }
         FileKind::Source => {
             fs::write(output, &data)?;
