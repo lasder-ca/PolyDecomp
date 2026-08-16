@@ -1,8 +1,11 @@
 use crate::model::NativeOutputFormat;
 use serde::{Deserialize, Serialize};
 
+#[path = "native_v050/lift.rs"]
 mod lift;
+#[path = "native_v050/pe.rs"]
 mod pe;
+#[path = "native_v050/render.rs"]
 mod render;
 
 #[derive(Debug, Clone, Deserialize)]
