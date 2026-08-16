@@ -1,7 +1,31 @@
-use clap::{Parser, Subcommand};
-use polydecomp::{DecompileOptions, capabilities, decompile, default_output, detect};
+use clap::{Parser, Subcommand, ValueEnum};
+use polydecomp::{
+    DecompileOptions, NativeOutputFormat, capabilities, decompile, default_output_with_format,
+    detect,
+};
 use serde_json::json;
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CliNativeFormat {
+    C,
+    Rust,
+    Python,
+    Asm,
+    Json,
+}
+
+impl From<CliNativeFormat> for NativeOutputFormat {
+    fn from(value: CliNativeFormat) -> Self {
+        match value {
+            CliNativeFormat::C => Self::C,
+            CliNativeFormat::Rust => Self::Rust,
+            CliNativeFormat::Python => Self::Python,
+            CliNativeFormat::Asm => Self::Assembly,
+            CliNativeFormat::Json => Self::Json,
+        }
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -27,6 +51,9 @@ enum Commands {
         input: PathBuf,
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Native-binary output format. Other input formats keep their natural source format.
+        #[arg(long, value_enum, default_value = "c")]
+        format: CliNativeFormat,
         #[arg(long)]
         force: bool,
     },
@@ -54,12 +81,22 @@ fn run_cli() -> Result<(), String> {
         Some(Commands::Decompile {
             input,
             output,
+            format,
             force,
         }) => {
             let detection = detect(&input)?;
-            let output = output.unwrap_or_else(|| default_output(&input, detection.kind));
-            let result = decompile(&input, &output, &DecompileOptions { force })
-                .map_err(|error| error.to_string())?;
+            let native_format = NativeOutputFormat::from(format);
+            let output = output
+                .unwrap_or_else(|| default_output_with_format(&input, detection.kind, native_format));
+            let result = decompile(
+                &input,
+                &output,
+                &DecompileOptions {
+                    force,
+                    native_format,
+                },
+            )
+            .map_err(|error| error.to_string())?;
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({
@@ -70,6 +107,7 @@ fn run_cli() -> Result<(), String> {
                     "language": result.detection.language,
                     "description": result.detection.description,
                     "fidelity": result.fidelity,
+                    "native_output_format": native_format.as_str(),
                     "external_backends": false,
                 }))
                 .map_err(|error| error.to_string())?
