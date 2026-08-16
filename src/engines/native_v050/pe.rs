@@ -24,9 +24,7 @@ fn read_u16(data: &[u8], offset: usize) -> Option<u16> {
 
 fn read_u32(data: &[u8], offset: usize) -> Option<u32> {
     let bytes = data.get(offset..offset.checked_add(4)?)?;
-    Some(u32::from_le_bytes([
-        bytes[0], bytes[1], bytes[2], bytes[3],
-    ]))
+    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
 }
 
 fn read_u64(data: &[u8], offset: usize) -> Option<u64> {

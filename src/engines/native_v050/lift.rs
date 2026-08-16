@@ -44,9 +44,7 @@ struct Abi {
 const WIN64_ARGS: &[&str] = &["rcx", "rdx", "r8", "r9"];
 const WIN64_VOLATILE: &[&str] = &["rax", "rcx", "rdx", "r8", "r9", "r10", "r11"];
 const SYSV64_ARGS: &[&str] = &["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
-const SYSV64_VOLATILE: &[&str] = &[
-    "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11",
-];
+const SYSV64_VOLATILE: &[&str] = &["rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11"];
 const NO_REGS: &[&str] = &[];
 
 fn abi_for(report: &RawReport) -> Abi {
@@ -78,9 +76,11 @@ fn split_asm(assembly: &str) -> (&str, &str) {
 }
 
 fn split_operands(operands: &str) -> (&str, Option<&str>) {
-    operands.split_once(',').map_or((operands.trim(), None), |(left, right)| {
-        (left.trim(), Some(right.trim()))
-    })
+    operands
+        .split_once(',')
+        .map_or((operands.trim(), None), |(left, right)| {
+            (left.trim(), Some(right.trim()))
+        })
 }
 
 fn canonical_register(value: &str) -> Option<&'static str> {
@@ -108,8 +108,7 @@ fn canonical_register(value: &str) -> Option<&'static str> {
 fn is_partial_register(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
-        "ax"
-            | "al"
+        "ax" | "al"
             | "ah"
             | "bx"
             | "bl"
@@ -150,8 +149,8 @@ fn is_partial_register(value: &str) -> bool {
 fn trim_size_prefix(value: &str) -> &str {
     let value = value.trim();
     for prefix in [
-        "byte ", "word ", "dword ", "qword ", "oword ", "xmmword ", "ymmword ",
-        "zmmword ", "tword ", "ptr ",
+        "byte ", "word ", "dword ", "qword ", "oword ", "xmmword ", "ymmword ", "zmmword ",
+        "tword ", "ptr ",
     ] {
         if let Some(stripped) = value.strip_prefix(prefix) {
             return stripped.trim();
@@ -174,7 +173,9 @@ fn displacement_token(value: &str) -> Option<u64> {
 }
 
 fn stack_variable(operand: &str) -> Option<String> {
-    let operand = trim_size_prefix(operand).to_ascii_lowercase().replace(' ', "");
+    let operand = trim_size_prefix(operand)
+        .to_ascii_lowercase()
+        .replace(' ', "");
     let start = operand.find('[')?;
     let end = operand[start..].find(']')?.checked_add(start)?;
     let inner = operand.get(start + 1..end)?;
@@ -248,7 +249,9 @@ fn resolve_operand(
 
 fn state_set(state: &mut SymbolicState, destination: &str, value: String) {
     if let Some(register) = canonical_register(destination) {
-        state.regs.insert(register.to_owned(), bounded_expression(value));
+        state
+            .regs
+            .insert(register.to_owned(), bounded_expression(value));
     } else if is_partial_register(destination) {
         let lower = destination.to_ascii_lowercase();
         let family = match lower.as_str() {
@@ -326,8 +329,7 @@ fn apply_state(
         "xor" if right.is_some_and(|right| left.eq_ignore_ascii_case(right)) => {
             state_set(state, left, "0".to_owned());
         }
-        "add" | "sub" | "and" | "or" | "xor" | "shl" | "sal" | "shr" | "sar"
-        | "imul" => {
+        "add" | "sub" | "and" | "or" | "xor" | "shl" | "sal" | "shr" | "sar" | "imul" => {
             if let Some(right) = right
                 && let Some(register) = canonical_register(left)
             {
@@ -423,7 +425,10 @@ fn compute_states(
         };
         let mut state = states.get(&address).cloned().unwrap_or_default();
         for instruction in &block.instructions {
-            let reference = references.get(&instruction.address).cloned().unwrap_or_default();
+            let reference = references
+                .get(&instruction.address)
+                .cloned()
+                .unwrap_or_default();
             apply_state(instruction, &mut state, abi, &reference);
         }
 
@@ -547,7 +552,9 @@ fn collect_symbols(file: &object::File<'_>) -> BTreeMap<u64, String> {
         if name.is_empty() {
             continue;
         }
-        symbols.entry(symbol.address()).or_insert_with(|| name.to_owned());
+        symbols
+            .entry(symbol.address())
+            .or_insert_with(|| name.to_owned());
     }
     symbols
 }
@@ -583,7 +590,9 @@ fn addressed_ascii(data: &[u8], base: u64, output: &mut BTreeMap<u64, String>) {
         };
         let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
         if looks_human(&cleaned) {
-            output.entry(base.saturating_add(begin as u64)).or_insert(cleaned);
+            output
+                .entry(base.saturating_add(begin as u64))
+                .or_insert(cleaned);
         }
         if output.len() >= MAX_ADDRESSED_STRINGS {
             return;
@@ -651,12 +660,7 @@ fn build_references(
 ) -> BTreeMap<u64, ReferenceInfo> {
     let import_slots = imports
         .iter()
-        .map(|entry| {
-            (
-                entry.iat_address,
-                format!("{}!{}", entry.dll, entry.name),
-            )
-        })
+        .map(|entry| (entry.iat_address, format!("{}!{}", entry.dll, entry.name)))
         .collect::<BTreeMap<_, _>>();
     let symbols = collect_symbols(file);
     let strings = collect_addressed_strings(file);
@@ -688,7 +692,12 @@ fn build_references(
     references
 }
 
-fn is_entry_prologue(function: &RawFunction, block: &RawBlock, index: usize, assembly: &str) -> bool {
+fn is_entry_prologue(
+    function: &RawFunction,
+    block: &RawBlock,
+    index: usize,
+    assembly: &str,
+) -> bool {
     if block.address != function.address || index > 5 {
         return false;
     }
@@ -772,14 +781,23 @@ fn readable_statement(
     if instruction.control == "conditional" {
         let condition = condition_expression(&mnemonic, comparison);
         return instruction.target.map_or_else(
-            || (
-                format!("if ({condition}) goto_indirect({operands});"),
-                "low".to_owned(),
-            ),
-            |target| (
-                format!("if ({condition}) goto L_{target:x};"),
-                if comparison.is_some() { "high" } else { "medium" }.to_owned(),
-            ),
+            || {
+                (
+                    format!("if ({condition}) goto_indirect({operands});"),
+                    "low".to_owned(),
+                )
+            },
+            |target| {
+                (
+                    format!("if ({condition}) goto L_{target:x};"),
+                    if comparison.is_some() {
+                        "high"
+                    } else {
+                        "medium"
+                    }
+                    .to_owned(),
+                )
+            },
         );
     }
 
@@ -805,8 +823,7 @@ fn readable_statement(
         "xor" if right.is_some_and(|right| left.eq_ignore_ascii_case(right)) => {
             (format!("{left_value} = 0;"), "high".to_owned())
         }
-        "add" | "sub" | "and" | "or" | "xor" | "shl" | "sal" | "shr" | "sar"
-        | "imul" => {
+        "add" | "sub" | "and" | "or" | "xor" | "shl" | "sal" | "shr" | "sar" | "imul" => {
             let operator = match mnemonic.as_str() {
                 "add" => "+",
                 "sub" => "-",
@@ -871,35 +888,38 @@ fn enhance_function(
         let mut instructions = Vec::new();
 
         for (index, instruction) in block.instructions.iter().enumerate() {
-            let reference = references.get(&instruction.address).cloned().unwrap_or_default();
+            let reference = references
+                .get(&instruction.address)
+                .cloned()
+                .unwrap_or_default();
             let (mnemonic, operands) = split_asm(&instruction.assembly);
             let mnemonic_lower = mnemonic.to_ascii_lowercase();
             let (left, right) = split_operands(operands);
 
-            if matches!(mnemonic_lower.as_str(), "cmp" | "test") {
-                if let Some(right) = right {
-                    let left_value = resolve_operand(
-                        left,
-                        &state,
-                        reference.memory_reference.as_deref(),
-                        &mut locals,
-                    );
-                    let right_value = resolve_operand(
-                        right,
-                        &state,
-                        reference.memory_reference.as_deref(),
-                        &mut locals,
-                    );
-                    comparison = Some(Comparison {
-                        kind: if mnemonic_lower == "test" {
-                            ComparisonKind::Test
-                        } else {
-                            ComparisonKind::Compare
-                        },
-                        left: left_value,
-                        right: right_value,
-                    });
-                }
+            if matches!(mnemonic_lower.as_str(), "cmp" | "test")
+                && let Some(right) = right
+            {
+                let left_value = resolve_operand(
+                    left,
+                    &state,
+                    reference.memory_reference.as_deref(),
+                    &mut locals,
+                );
+                let right_value = resolve_operand(
+                    right,
+                    &state,
+                    reference.memory_reference.as_deref(),
+                    &mut locals,
+                );
+                comparison = Some(Comparison {
+                    kind: if mnemonic_lower == "test" {
+                        ComparisonKind::Test
+                    } else {
+                        ComparisonKind::Compare
+                    },
+                    left: left_value,
+                    right: right_value,
+                });
             }
 
             let (pseudocode, confidence) = readable_statement(
@@ -1024,7 +1044,10 @@ pub(super) fn enhance(data: &[u8], raw: RawReport) -> Result<EnhancedReport, Str
             "PE import-table entries are mapped to IAT-backed indirect calls when the instruction uses RIP-relative memory.".to_owned(),
         );
     }
-    if matches!(file.architecture(), Architecture::Aarch64 | Architecture::Arm) {
+    if matches!(
+        file.architecture(),
+        Architecture::Aarch64 | Architecture::Arm
+    ) {
         notes.push(
             "The v0.5 symbolic readability pass currently focuses on x86/x86_64; ARM/AArch64 continues to use the built-in semantic decoder with the common renderer.".to_owned(),
         );
@@ -1049,7 +1072,10 @@ mod tests {
 
     #[test]
     fn stack_slots_get_readable_names() {
-        assert_eq!(stack_variable("qword [rbp-20h]"), Some("local_20".to_owned()));
+        assert_eq!(
+            stack_variable("qword [rbp-20h]"),
+            Some("local_20".to_owned())
+        );
         assert_eq!(stack_variable("[rsp+0x30]"), Some("stack_30".to_owned()));
     }
 

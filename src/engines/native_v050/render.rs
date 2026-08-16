@@ -99,7 +99,11 @@ fn function_summary(out: &mut String, function: &EnhancedFunction, prefix: &str)
 }
 
 fn c_signature(function: &EnhancedFunction) -> String {
-    let return_type = if function.returns_value { "uintptr_t" } else { "void" };
+    let return_type = if function.returns_value {
+        "uintptr_t"
+    } else {
+        "void"
+    };
     let args = if function.arguments.is_empty() {
         "void".to_owned()
     } else {
@@ -120,7 +124,11 @@ fn rust_signature(function: &EnhancedFunction) -> String {
         .map(|argument| format!("{}: usize", argument.name))
         .collect::<Vec<_>>()
         .join(", ");
-    let return_type = if function.returns_value { " -> usize" } else { "" };
+    let return_type = if function.returns_value {
+        " -> usize"
+    } else {
+        ""
+    };
     format!("fn {}({args}){return_type}", function.name)
 }
 
