@@ -1,6 +1,6 @@
 # PolyDecomp
 
-PolyDecomp is a **self-contained Rust decompiler/disassembler** with a native GUI and CLI. Version 0.3 removes the external decompiler-backend model: the release binary does not require Ghidra, CFR, JADX, pycdc, LuaDec, WABT, ILSpy, RetDec, or `objdump`.
+PolyDecomp is a **self-contained Rust decompiler/disassembler** with a native GUI and CLI. The release binary does not require Ghidra, CFR, JADX, pycdc, LuaDec, WABT, ILSpy, RetDec, or `objdump`.
 
 日本語 / English UI is included in the same executable.
 
@@ -16,11 +16,29 @@ PolyDecomp is a **self-contained Rust decompiler/disassembler** with a native GU
 | Lua `.luac` | Lua 5.1 prototype/instruction decoder; structural recovery for 5.2–5.4 | Lua-like source/report |
 | WebAssembly `.wasm` | internally linked Rust WebAssembly printer | WAT |
 | .NET `.exe/.dll` | PE/CLR metadata and IL structural analysis | C#-like source/report |
-| PE / ELF / Mach-O | internal object parser, x86/x64 decoder, AArch64 basic semantic decoder | C-like pseudocode/disassembly |
-| Go / Rust binaries | native engine + language markers | C-like pseudocode/disassembly |
+| PE / ELF / Mach-O | object parser + function recovery + CFG + x86/x64/AArch64 decoding | C-like / Rust-like / Python-like / ASM / JSON |
+| Go / Rust binaries | native engine + language markers + CFG recovery | C-like / Rust-like / Python-like / ASM / JSON |
 | unknown binary | internal strings + hex structural analysis | analysis report |
 
-“Decompiler” does not mean that compiler-lost information can be recreated. Optimized native binaries can lose variable names, comments, source types, control-flow structure, generics and other source-level information. PolyDecomp reconstructs what is recoverable and annotates lower-confidence output instead of inventing missing source.
+“Decompiler” does not mean that compiler-lost information can be recreated. Optimized native binaries can lose variable names, comments, source types, generics, and source-level control structures. PolyDecomp reconstructs what is recoverable instead of inventing missing source.
+
+## Native analysis in 0.4
+
+Native decompilation no longer treats an entire `.text` section as one function.
+
+PolyDecomp now:
+
+- recovers symbol-defined functions
+- parses Windows x64 `.pdata` runtime-function entries
+- starts analysis from the executable entry point
+- recursively discovers direct-call targets when metadata is sparse
+- builds basic blocks and per-function control-flow graphs
+- follows conditional/unconditional branches instead of linearly sweeping all code
+- converts common x86/x64 instructions into readable pseudocode statements
+- filters human-readable ASCII/UTF-16 strings from non-code sections to reduce instruction-byte noise
+- emits C-like, Rust-like, Python-like, assembly, or structured JSON output
+
+The pseudocode formats are intended for reading and analysis. They are not guaranteed to compile as reconstructed source.
 
 ## GUI
 
@@ -35,19 +53,28 @@ Features:
 - drag and drop
 - automatic format/language detection
 - Japanese / English switch
+- native output selector: C / Rust / Python / ASM / JSON
 - output preview
 - background decompilation so the UI stays responsive
-- no decompiler executable installation screen because the engines are built in
+- no external decompiler installation
 
 ## CLI
 
 ```bash
 polydecomp detect program.exe
 polydecomp doctor
+
 polydecomp decompile Example.class
 polydecomp decompile app.apk -o app-decompiled
-polydecomp decompile program.exe -o program.decompiled.c --force
+
+polydecomp decompile program.exe --format c
+polydecomp decompile program.exe --format rust
+polydecomp decompile program.exe --format python
+polydecomp decompile program.exe --format asm
+polydecomp decompile program.exe --format json
 ```
+
+The native format also determines the automatic output extension (`.c`, `.rs`, `.py`, `.asm`, or `.json`).
 
 `doctor` reports the built-in capabilities rather than searching the machine for external programs.
 

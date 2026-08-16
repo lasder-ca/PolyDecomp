@@ -1,8 +1,8 @@
 use crate::capabilities::capabilities;
-use crate::decompile::{decompile, default_output};
+use crate::decompile::{decompile, default_output_with_format};
 use crate::detect::detect;
 use crate::i18n::UiLanguage;
-use crate::model::{DecompileOptions, DecompileResult, Detection};
+use crate::model::{DecompileOptions, DecompileResult, Detection, FileKind, NativeOutputFormat};
 use eframe::egui;
 use rfd::FileDialog;
 use std::fs;
@@ -19,6 +19,7 @@ pub struct PolyDecompApp {
     input: String,
     output: String,
     detection: Option<Detection>,
+    native_format: NativeOutputFormat,
     preview: String,
     log: String,
     worker: Option<Receiver<WorkerResult>>,
@@ -32,6 +33,7 @@ impl Default for PolyDecompApp {
             input: String::new(),
             output: String::new(),
             detection: None,
+            native_format: NativeOutputFormat::C,
             preview: String::new(),
             log: String::new(),
             worker: None,
@@ -45,6 +47,16 @@ impl PolyDecompApp {
         self.language.text(key)
     }
 
+    fn format_label(format: NativeOutputFormat) -> &'static str {
+        match format {
+            NativeOutputFormat::C => "C-like",
+            NativeOutputFormat::Rust => "Rust-like",
+            NativeOutputFormat::Python => "Python-like",
+            NativeOutputFormat::Assembly => "Assembly",
+            NativeOutputFormat::Json => "JSON",
+        }
+    }
+
     fn set_input(&mut self, path: PathBuf) {
         self.input = path.display().to_string();
         self.apply_detection(&path);
@@ -53,7 +65,9 @@ impl PolyDecompApp {
     fn apply_detection(&mut self, path: &Path) {
         match detect(path) {
             Ok(detection) => {
-                self.output = default_output(path, detection.kind).display().to_string();
+                self.output = default_output_with_format(path, detection.kind, self.native_format)
+                    .display()
+                    .to_string();
                 self.log = format!("{}: {}", self.t("kind"), detection.kind.as_str());
                 self.detection = Some(detection);
             }
@@ -99,7 +113,9 @@ impl PolyDecompApp {
             return;
         };
         let input = PathBuf::from(self.input.trim());
-        self.output = default_output(&input, detection.kind).display().to_string();
+        self.output = default_output_with_format(&input, detection.kind, self.native_format)
+            .display()
+            .to_string();
     }
 
     fn start_decompile(&mut self) {
@@ -116,17 +132,27 @@ impl PolyDecompApp {
             return;
         };
         if self.output.trim().is_empty() {
-            self.output = default_output(&input, detection.kind).display().to_string();
+            self.output = default_output_with_format(&input, detection.kind, self.native_format)
+                .display()
+                .to_string();
         }
         let output = PathBuf::from(self.output.trim());
+        let native_format = self.native_format;
         let (sender, receiver) = mpsc::channel();
         self.worker = Some(receiver);
         self.busy = true;
         self.preview.clear();
         self.log = self.t("working").to_owned();
         thread::spawn(move || {
-            let result = decompile(&input, &output, &DecompileOptions { force: true })
-                .map_err(|error| error.to_string());
+            let result = decompile(
+                &input,
+                &output,
+                &DecompileOptions {
+                    force: true,
+                    native_format,
+                },
+            )
+            .map_err(|error| error.to_string());
             let _ = sender.send(WorkerResult(result));
         });
     }
@@ -232,6 +258,51 @@ impl eframe::App for PolyDecompApp {
                     }
                     ui.end_row();
                 });
+
+            if self
+                .detection
+                .as_ref()
+                .is_some_and(|detection| detection.kind == FileKind::Native)
+            {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.strong(format!("{}:", self.t("output_format")));
+                    let before = self.native_format;
+                    egui::ComboBox::from_id_salt("native-output-format")
+                        .selected_text(Self::format_label(self.native_format))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut self.native_format,
+                                NativeOutputFormat::C,
+                                "C-like",
+                            );
+                            ui.selectable_value(
+                                &mut self.native_format,
+                                NativeOutputFormat::Rust,
+                                "Rust-like",
+                            );
+                            ui.selectable_value(
+                                &mut self.native_format,
+                                NativeOutputFormat::Python,
+                                "Python-like",
+                            );
+                            ui.selectable_value(
+                                &mut self.native_format,
+                                NativeOutputFormat::Assembly,
+                                "Assembly",
+                            );
+                            ui.selectable_value(
+                                &mut self.native_format,
+                                NativeOutputFormat::Json,
+                                "JSON",
+                            );
+                        });
+                    if before != self.native_format {
+                        self.reset_output();
+                    }
+                    ui.weak(self.t("output_format_note"));
+                });
+            }
 
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -422,8 +493,8 @@ fn install_japanese_font(ctx: &egui::Context) {
 pub fn run() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1080.0, 760.0])
-            .with_min_inner_size([760.0, 520.0]),
+            .with_inner_size([1080.0, 790.0])
+            .with_min_inner_size([760.0, 540.0]),
         ..Default::default()
     };
     eframe::run_native(
