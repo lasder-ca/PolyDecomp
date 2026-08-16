@@ -39,6 +39,39 @@ impl FileKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum NativeOutputFormat {
+    #[default]
+    C,
+    Rust,
+    Python,
+    Assembly,
+    Json,
+}
+
+impl NativeOutputFormat {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::C => "c",
+            Self::Rust => "rust",
+            Self::Python => "python",
+            Self::Assembly => "asm",
+            Self::Json => "json",
+        }
+    }
+
+    pub const fn extension(self) -> &'static str {
+        match self {
+            Self::C => "c",
+            Self::Rust => "rs",
+            Self::Python => "py",
+            Self::Assembly => "asm",
+            Self::Json => "json",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Detection {
     pub kind: FileKind,
@@ -58,6 +91,7 @@ pub struct Capability {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DecompileOptions {
     pub force: bool,
+    pub native_format: NativeOutputFormat,
 }
 
 #[derive(Debug, Clone, Serialize)]
