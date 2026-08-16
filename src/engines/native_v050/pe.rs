@@ -134,6 +134,23 @@ fn normalize_dll(value: &str) -> String {
         .to_owned()
 }
 
+fn import_name_rva(thunk: u64, pointer_size: usize) -> Option<u32> {
+    let ordinal_mask = if pointer_size == 8 {
+        1u64 << 63
+    } else {
+        1u64 << 31
+    };
+    if thunk & ordinal_mask != 0 {
+        return None;
+    }
+    let name_mask = if pointer_size == 8 {
+        0xffff_ffffu64
+    } else {
+        0x7fff_ffffu64
+    };
+    u32::try_from(thunk & name_mask).ok()
+}
+
 pub(super) fn imports(data: &[u8]) -> Vec<ImportRecord> {
     let Some(layout) = parse_layout(data) else {
         return Vec::new();
@@ -202,8 +219,7 @@ pub(super) fn imports(data: &[u8]) -> Vec<ImportRecord> {
             let name = if thunk & ordinal_mask != 0 {
                 format!("ordinal_{}", thunk & 0xffff)
             } else {
-                let name_rva = u32::try_from(thunk & 0x7fff_ffff).ok();
-                name_rva
+                import_name_rva(thunk, layout.pointer_size)
                     .and_then(|rva| rva_to_offset(&layout, data.len(), rva))
                     .and_then(|offset| read_c_string(data, offset.saturating_add(2), 4096))
                     .unwrap_or_else(|| format!("import_{index}"))
@@ -250,5 +266,12 @@ mod tests {
     fn normalizes_dll_suffix() {
         assert_eq!(normalize_dll("KERNEL32.dll"), "KERNEL32");
         assert_eq!(normalize_dll("USER32.DLL"), "USER32");
+    }
+
+    #[test]
+    fn pe32_plus_name_rva_keeps_bit_31() {
+        assert_eq!(import_name_rva(0x8000_1234, 8), Some(0x8000_1234));
+        assert_eq!(import_name_rva(1u64 << 63, 8), None);
+        assert_eq!(import_name_rva(1u64 << 31, 4), None);
     }
 }
