@@ -2,6 +2,9 @@ pub mod dex;
 pub mod dotnet;
 pub mod jvm;
 pub mod lua;
+#[path = "native.rs"]
+mod native_legacy;
+#[path = "native_v050.rs"]
 pub mod native;
 pub mod pyc;
 pub mod wasm;
