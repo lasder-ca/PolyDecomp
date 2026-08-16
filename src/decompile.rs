@@ -1,8 +1,6 @@
 use crate::detect::detect;
 use crate::engines::{self, dex, dotnet, jvm, lua, native, pyc, wasm};
-use crate::model::{
-    DecompileOptions, DecompileResult, Detection, FileKind, NativeOutputFormat,
-};
+use crate::model::{DecompileOptions, DecompileResult, Detection, FileKind, NativeOutputFormat};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -38,10 +36,9 @@ pub fn default_output_with_format(
         FileKind::LuaBytecode => input.with_file_name(format!("{stem}.decompiled.lua")),
         FileKind::Wasm => input.with_file_name(format!("{stem}.decompiled.wat")),
         FileKind::DotNet => input.with_file_name(format!("{stem}.decompiled.cs")),
-        FileKind::Native => input.with_file_name(format!(
-            "{stem}.decompiled.{}",
-            native_format.extension()
-        )),
+        FileKind::Native => {
+            input.with_file_name(format!("{stem}.decompiled.{}", native_format.extension()))
+        }
         FileKind::Source => input.with_file_name(format!("{stem}.copy.txt")),
         FileKind::Unknown => input.with_file_name(format!("{stem}.analysis.txt")),
     }

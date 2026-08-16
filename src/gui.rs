@@ -2,9 +2,7 @@ use crate::capabilities::capabilities;
 use crate::decompile::{decompile, default_output_with_format};
 use crate::detect::detect;
 use crate::i18n::UiLanguage;
-use crate::model::{
-    DecompileOptions, DecompileResult, Detection, FileKind, NativeOutputFormat,
-};
+use crate::model::{DecompileOptions, DecompileResult, Detection, FileKind, NativeOutputFormat};
 use eframe::egui;
 use rfd::FileDialog;
 use std::fs;

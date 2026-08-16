@@ -63,9 +63,7 @@ impl UiLanguage {
             (Self::English, "select_input") => "Select an input file",
             (Self::Japanese, "done") => "完了",
             (Self::English, "done") => "Done",
-            (Self::Japanese, "no_external") => {
-                "Ghidra / CFR / JADX / pycdc / ILSpy 等は不要です"
-            }
+            (Self::Japanese, "no_external") => "Ghidra / CFR / JADX / pycdc / ILSpy 等は不要です",
             (Self::English, "no_external") => {
                 "No Ghidra, CFR, JADX, pycdc, ILSpy, or other decompiler executables required"
             }

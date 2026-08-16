@@ -1,6 +1,4 @@
-use polydecomp::{
-    FileKind, NativeOutputFormat, default_output, default_output_with_format,
-};
+use polydecomp::{FileKind, NativeOutputFormat, default_output, default_output_with_format};
 use std::path::Path;
 
 #[test]

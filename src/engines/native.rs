@@ -250,21 +250,21 @@ fn collect_seed_functions(file: &object::File<'_>, data: &[u8]) -> Vec<Function>
     }
 
     let entry = file.entry();
-    if entry != 0 {
-        if let Some(section) = section_for_address(file, entry) {
-            let entry_function = Function {
-                name: format!("entry_{entry:x}"),
-                address: entry,
-                size: 0,
-                section,
-                origin: "entry-point",
-            };
-            insert_function(&mut functions, entry_function);
-            if let Some(existing) = functions.get_mut(&entry) {
-                if existing.name.starts_with("sub_") {
-                    existing.name = format!("entry_{entry:x}");
-                }
-            }
+    if entry != 0
+        && let Some(section) = section_for_address(file, entry)
+    {
+        let entry_function = Function {
+            name: format!("entry_{entry:x}"),
+            address: entry,
+            size: 0,
+            section,
+            origin: "entry-point",
+        };
+        insert_function(&mut functions, entry_function);
+        if let Some(existing) = functions.get_mut(&entry)
+            && existing.name.starts_with("sub_")
+        {
+            existing.name = format!("entry_{entry:x}");
         }
     }
 
@@ -279,9 +279,15 @@ fn function_bytes(file: &object::File<'_>, function: &Function) -> Option<Vec<u8
     if start >= section_data.len() {
         return None;
     }
-    let requested = usize::try_from(function.size).ok().filter(|size| *size != 0);
-    let size = requested
-        .unwrap_or_else(|| section_data.len().saturating_sub(start).min(UNKNOWN_FUNCTION_LIMIT));
+    let requested = usize::try_from(function.size)
+        .ok()
+        .filter(|size| *size != 0);
+    let size = requested.unwrap_or_else(|| {
+        section_data
+            .len()
+            .saturating_sub(start)
+            .min(UNKNOWN_FUNCTION_LIMIT)
+    });
     let end = start.saturating_add(size).min(section_data.len());
     Some(section_data[start..end].to_vec())
 }
@@ -481,10 +487,10 @@ fn direct_call_targets(analysis: &FunctionAnalysis) -> Vec<u64> {
     let mut targets = BTreeSet::new();
     for block in &analysis.blocks {
         for instruction in &block.instructions {
-            if instruction.control == "call" {
-                if let Some(target) = instruction.target {
-                    targets.insert(target);
-                }
+            if instruction.control == "call"
+                && let Some(target) = instruction.target
+            {
+                targets.insert(target);
             }
         }
     }
@@ -647,10 +653,10 @@ fn analyze_aarch64(bytes: &[u8], address: u64) -> FunctionAnalysis {
         let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         let pc = address.saturating_add((index * 4) as u64);
         let (pseudo, control, target) = aarch64_instruction(word, pc);
-        if matches!(control, "jump" | "conditional") {
-            if let Some(target) = target {
-                successors.insert(target);
-            }
+        if matches!(control, "jump" | "conditional")
+            && let Some(target) = target
+        {
+            successors.insert(target);
         }
         instructions.push(NativeInstruction {
             address: pc,
@@ -733,14 +739,13 @@ fn ascii_strings(data: &[u8], output: &mut BTreeSet<String>) {
     for (index, byte) in data.iter().copied().enumerate() {
         if matches!(byte, 0x20..=0x7e) || matches!(byte, b'\t' | b'\n' | b'\r') {
             start.get_or_insert(index);
-        } else if let Some(begin) = start.take() {
-            if index.saturating_sub(begin) >= 6 {
-                if let Ok(text) = std::str::from_utf8(&data[begin..index]) {
-                    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                    if looks_human(&cleaned) {
-                        output.insert(cleaned);
-                    }
-                }
+        } else if let Some(begin) = start.take()
+            && index.saturating_sub(begin) >= 6
+            && let Ok(text) = std::str::from_utf8(&data[begin..index])
+        {
+            let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            if looks_human(&cleaned) {
+                output.insert(cleaned);
             }
         }
     }
@@ -751,12 +756,12 @@ fn utf16le_strings(data: &[u8], output: &mut BTreeSet<String>) {
     for pair in data.chunks_exact(2) {
         let value = u16::from_le_bytes([pair[0], pair[1]]);
         if value == 0 {
-            if current.len() >= 6 {
-                if let Ok(text) = String::from_utf16(&current) {
-                    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                    if looks_human(&cleaned) {
-                        output.insert(cleaned);
-                    }
+            if current.len() >= 6
+                && let Ok(text) = String::from_utf16(&current)
+            {
+                let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                if looks_human(&cleaned) {
+                    output.insert(cleaned);
                 }
             }
             current.clear();
@@ -863,13 +868,13 @@ fn python_statement(statement: &str) -> String {
     if let Some(target) = statement.strip_prefix("goto L_") {
         return format!("goto(\"L_{target}\")");
     }
-    if let Some(rest) = statement.strip_prefix("if (condition_") {
-        if let Some((condition, target)) = rest.split_once(") goto L_") {
-            return format!(
-                "if condition(\"{condition}\"):\n            goto(\"L_{}\")",
-                target.trim_end_matches(';')
-            );
-        }
+    if let Some(rest) = statement.strip_prefix("if (condition_")
+        && let Some((condition, target)) = rest.split_once(") goto L_")
+    {
+        return format!(
+            "if condition(\"{condition}\"):\n            goto(\"L_{}\")",
+            target.trim_end_matches(';')
+        );
     }
     if statement.starts_with("/*") {
         return format!("# {}", statement.trim_matches(&['/', '*', ' '][..]));
@@ -877,11 +882,7 @@ fn python_statement(statement: &str) -> String {
     statement.to_owned()
 }
 
-fn render_function_text(
-    out: &mut String,
-    function: &FunctionAnalysis,
-    format: NativeOutputFormat,
-) {
+fn render_function_text(out: &mut String, function: &FunctionAnalysis, format: NativeOutputFormat) {
     match format {
         NativeOutputFormat::C => {
             let _ = writeln!(

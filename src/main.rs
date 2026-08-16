@@ -86,8 +86,9 @@ fn run_cli() -> Result<(), String> {
         }) => {
             let detection = detect(&input)?;
             let native_format = NativeOutputFormat::from(format);
-            let output = output
-                .unwrap_or_else(|| default_output_with_format(&input, detection.kind, native_format));
+            let output = output.unwrap_or_else(|| {
+                default_output_with_format(&input, detection.kind, native_format)
+            });
             let result = decompile(
                 &input,
                 &output,
