@@ -7,10 +7,11 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       # eframe 0.36 requires Rust 1.95, while PolyDecomp supports Rust 1.92.
+      # eframe is pre-1.0, so this incompatible 0.35 -> 0.36 change is a SemVer minor update.
       # Revisit this when the project's declared MSRV is intentionally raised.
       - dependency-name: "eframe"
-        update-types:
-          - "version-update:semver-major"
+        versions:
+          - ">=0.36, <0.37"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
