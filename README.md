@@ -16,15 +16,15 @@ PolyDecomp is a **self-contained Rust decompiler/disassembler** with a native GU
 | Lua `.luac` | Lua 5.1 prototype/instruction decoder; structural recovery for 5.2–5.4 | Lua-like source/report |
 | WebAssembly `.wasm` | internally linked Rust WebAssembly printer | WAT |
 | .NET `.exe/.dll` | PE/CLR metadata and IL structural analysis | C#-like source/report |
-| PE / ELF / Mach-O | object parser + function recovery + CFG + x86/x64/AArch64 decoding | C-like / Rust-like / Python-like / ASM / JSON |
-| Go / Rust binaries | native engine + language markers + CFG recovery | C-like / Rust-like / Python-like / ASM / JSON |
+| PE / ELF / Mach-O | object parser + function recovery + CFG + native readability pass | C-like / Rust-like / Python-like / ASM / JSON |
+| Go / Rust binaries | native engine + language markers + CFG/readability recovery | C-like / Rust-like / Python-like / ASM / JSON |
 | unknown binary | internal strings + hex structural analysis | analysis report |
 
 “Decompiler” does not mean that compiler-lost information can be recreated. Optimized native binaries can lose variable names, comments, source types, generics, and source-level control structures. PolyDecomp reconstructs what is recoverable instead of inventing missing source.
 
-## Native analysis in 0.4
+## Native analysis in 0.5
 
-Native decompilation no longer treats an entire `.text` section as one function.
+Native decompilation uses two internal stages. The v0.4 raw backend recovers functions and CFGs; v0.5 adds a bounded readability/lifting pass over that IR.
 
 PolyDecomp now:
 
@@ -34,11 +34,19 @@ PolyDecomp now:
 - recursively discovers direct-call targets when metadata is sparse
 - builds basic blocks and per-function control-flow graphs
 - follows conditional/unconditional branches instead of linearly sweeping all code
-- converts common x86/x64 instructions into readable pseudocode statements
-- filters human-readable ASCII/UTF-16 strings from non-code sections to reduce instruction-byte noise
+- symbolically propagates common x86/x64 register values across CFG edges
+- applies Windows x64 or System V x86_64 ABI knowledge to infer generic arguments such as `arg0`
+- names common stack slots such as `local_20`, `stack_30`, and `stack_arg_10`
+- combines `cmp` / `test` with following conditional branches to produce expressions such as `arg0 == 0`
+- detects loop headers from CFG back-edges
+- suppresses common prologue/epilogue/no-op noise in readable source-like views
+- removes unconditional jumps that only target the next natural block
+- parses PE import tables and resolves common RIP-relative IAT calls to `DLL!Function` names
+- resolves some RIP-relative references to recovered strings and object symbols
+- retains raw assembly, addresses, confidence labels, CFG successors, and original pseudocode in enriched JSON
 - emits C-like, Rust-like, Python-like, assembly, or structured JSON output
 
-The pseudocode formats are intended for reading and analysis. They are not guaranteed to compile as reconstructed source.
+The C/Rust/Python formats are intended for reading and analysis. They are not guaranteed to compile as reconstructed source. ABI-derived arguments, inferred return expressions, and call arguments are heuristics and are labeled accordingly.
 
 ## GUI
 
