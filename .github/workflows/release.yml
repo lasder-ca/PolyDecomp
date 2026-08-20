@@ -21,7 +21,7 @@ jobs:
       sha: ${{ steps.version.outputs.sha }}
       skip: ${{ steps.version.outputs.skip }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
       - id: version
@@ -57,7 +57,7 @@ jobs:
             asset: polydecomp-macos-aarch64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
