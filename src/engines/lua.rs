@@ -246,7 +246,13 @@ pub fn decompile_lua(data: &[u8]) -> Result<String, String> {
     }
     out.push_str("\n-- 32-bit instruction candidates (little-endian):\n");
     let start = if data.len() > 32 { 32 } else { 6 };
-    for (i, chunk) in data[start..].chunks_exact(4).take(200_000).enumerate() {
+    for (i, chunk) in data[start..]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .take(200_000)
+        .enumerate()
+    {
         let raw = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         let _ = writeln!(out, "-- {:06x}: 0x{raw:08x}", start + i * 4);
     }
