@@ -6,6 +6,10 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: release-${{ github.repository }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -106,7 +110,13 @@ jobs:
           chmod +x '${{ matrix.asset }}'
       - name: Upload release asset
         shell: bash
-        run: gh release upload '${{ needs.prepare.outputs.tag }}' '${{ matrix.asset }}' --clobber
+        run: |
+          CURRENT_MAIN=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ '${{ needs.prepare.outputs.sha }}' != "$CURRENT_MAIN" ]; then
+            echo "::error::Refusing to upload assets from stale release head ${{ needs.prepare.outputs.sha }}; current main is $CURRENT_MAIN"
+            exit 1
+          fi
+          gh release upload '${{ needs.prepare.outputs.tag }}' '${{ matrix.asset }}' --clobber
 
   publish:
     needs: [prepare, build]
