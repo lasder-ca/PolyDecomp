@@ -603,7 +603,7 @@ fn addressed_ascii(data: &[u8], base: u64, output: &mut BTreeMap<u64, String>) {
 fn addressed_utf16(data: &[u8], base: u64, output: &mut BTreeMap<u64, String>) {
     let mut current = Vec::new();
     let mut start = 0usize;
-    for (index, pair) in data.chunks_exact(2).enumerate() {
+    for (index, pair) in data.as_chunks::<2>().0.iter().enumerate() {
         let value = u16::from_le_bytes([pair[0], pair[1]]);
         if value == 0 {
             if current.len() >= 4
