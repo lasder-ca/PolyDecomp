@@ -534,7 +534,7 @@ fn disassemble_code(data: &[u8], code_off: u32) -> Result<String, String> {
     }
     let bytes = checked_slice(data, off + 16, insns_size.saturating_mul(2))?;
     let mut units = Vec::with_capacity(insns_size);
-    for chunk in bytes.chunks_exact(2) {
+    for chunk in bytes.as_chunks::<2>().0 {
         units.push(u16::from_le_bytes([chunk[0], chunk[1]]));
     }
     let mut out = format!("        // registers={registers}, ins={ins}, outs={outs}\n");
