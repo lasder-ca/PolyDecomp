@@ -6,6 +6,10 @@ on:
     types: [completed]
     branches: [main]
 
+concurrency:
+  group: release-${{ github.repository }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -24,20 +28,45 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
       - id: version
         shell: bash
         run: |
           VERSION=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n1)
           TAG="v${VERSION}"
           SHA='${{ github.event.workflow_run.head_sha }}'
+          CURRENT_MAIN=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            gh release create "$TAG" --target "$SHA" --title "PolyDecomp $TAG" --notes-file RELEASE_NOTES.md --draft
+
+          if [ "$SHA" != "$CURRENT_MAIN" ]; then
+            echo "::error::Refusing to release stale CI head $SHA; current main is $CURRENT_MAIN"
+            exit 1
           fi
+
+          RELEASE_STATE=$(
+            gh api --paginate "repos/${{ github.repository }}/releases" \
+              --jq ".[] | select(.tag_name == \"$TAG\") | if .draft then \"draft\" else \"published\" end" \
+              | head -n1
+          )
+
+          case "$RELEASE_STATE" in
+            published)
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+            draft)
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              gh release edit "$TAG" --target "$SHA"
+              ;;
+            "")
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              gh release create "$TAG" --target "$SHA" --title "PolyDecomp $TAG" --notes-file RELEASE_NOTES.md --draft
+              ;;
+            *)
+              echo "::error::Unexpected release state for $TAG: $RELEASE_STATE"
+              exit 1
+              ;;
+          esac
 
   build:
     needs: prepare
@@ -60,6 +89,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux GUI build dependencies
         if: runner.os == 'Linux'
@@ -80,12 +110,26 @@ jobs:
           chmod +x '${{ matrix.asset }}'
       - name: Upload release asset
         shell: bash
-        run: gh release upload '${{ needs.prepare.outputs.tag }}' '${{ matrix.asset }}' --clobber
+        run: |
+          CURRENT_MAIN=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ '${{ needs.prepare.outputs.sha }}' != "$CURRENT_MAIN" ]; then
+            echo "::error::Refusing to upload assets from stale release head ${{ needs.prepare.outputs.sha }}; current main is $CURRENT_MAIN"
+            exit 1
+          fi
+          gh release upload '${{ needs.prepare.outputs.tag }}' '${{ matrix.asset }}' --clobber
 
   publish:
     needs: [prepare, build]
     if: needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: Verify release head is still current
+        shell: bash
+        run: |
+          CURRENT_MAIN=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ '${{ needs.prepare.outputs.sha }}' != "$CURRENT_MAIN" ]; then
+            echo "::error::Refusing to publish stale release head ${{ needs.prepare.outputs.sha }}; current main is $CURRENT_MAIN"
+            exit 1
+          fi
       - name: Publish draft release
         run: gh release edit '${{ needs.prepare.outputs.tag }}' --repo '${{ github.repository }}' --draft=false
