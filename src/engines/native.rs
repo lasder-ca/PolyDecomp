@@ -169,7 +169,7 @@ fn collect_pdata_functions(file: &object::File<'_>, data: &[u8]) -> Vec<Function
     };
 
     let mut out = Vec::new();
-    for chunk in bytes.chunks_exact(12) {
+    for chunk in bytes.as_chunks::<12>().0 {
         let begin = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         let end = u32::from_le_bytes([chunk[4], chunk[5], chunk[6], chunk[7]]);
         if begin == 0 || end <= begin {
@@ -646,7 +646,9 @@ fn analyze_aarch64(bytes: &[u8], address: u64) -> FunctionAnalysis {
     let mut instructions = Vec::new();
     let mut successors = BTreeSet::new();
     for (index, chunk) in bytes
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .take(MAX_INSTRUCTIONS_PER_FUNCTION)
         .enumerate()
     {
@@ -753,7 +755,7 @@ fn ascii_strings(data: &[u8], output: &mut BTreeSet<String>) {
 
 fn utf16le_strings(data: &[u8], output: &mut BTreeSet<String>) {
     let mut current = Vec::new();
-    for pair in data.chunks_exact(2) {
+    for pair in data.as_chunks::<2>().0 {
         let value = u16::from_le_bytes([pair[0], pair[1]]);
         if value == 0 {
             if current.len() >= 6
