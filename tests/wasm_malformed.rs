@@ -32,8 +32,5 @@ fn rejects_truncated_wasm_version() {
 
 #[test]
 fn rejects_unterminated_wasm_section_length() {
-    assert_wasm_parse_rejected(
-        "unterminated-section.wasm",
-        b"\0asm\x01\0\0\0\x01\x01\x80",
-    );
+    assert_wasm_parse_rejected("unterminated-section.wasm", b"\0asm\x01\0\0\0\x01\x01\x80");
 }
